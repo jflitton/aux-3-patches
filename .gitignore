@@ -1,0 +1,5 @@
+# Build outputs contain bytes derived from Apple ROMs and kernels: never commit them.
+build/
+.venv/
+__pycache__/
+*.pyc

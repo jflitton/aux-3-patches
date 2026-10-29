@@ -1,0 +1,33 @@
+#!/bin/sh
+#
+#	startup dayna: configure the DaynaPORT interface, dp0, from /etc/NETADDRS,
+#	as /etc/startup.d/ae6 does for Apple Ethernet cards. Its line:
+#
+#	dp0	IP-address	broadcast-address	[netmask [gateway]]
+#
+#	The gateway, if given, becomes the default route.
+#
+PATH=/bin:/usr/bin:/etc:/usr/etc
+NETADDRS=/etc/NETADDRS
+
+if [ "$1" = "-i" ]; then
+	exit 0
+fi
+/etc/ifconfig dp0 > /dev/null 2>&1 || exit 0	# not in this kernel, or not found
+
+set '' `/bin/sed -n '/^dp0[ 	]/p' $NETADDRS 2>/dev/null`
+shift
+if [ $# -lt 2 ]; then
+	echo "dp0: no dp0 line in $NETADDRS; not configured"
+	exit 0
+fi
+if [ -n "$4" ]; then
+	/etc/ifconfig dp0 $2 netmask $4 -trailers
+else
+	/etc/ifconfig dp0 $2 -trailers
+fi
+/etc/ifconfig dp0
+if [ -n "$5" ]; then
+	/usr/etc/route add default $5 1
+fi
+exit 0

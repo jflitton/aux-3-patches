@@ -1,0 +1,100 @@
+; A/UX /bin/date: setting years after 1999, and %y after 1999. Apply with tools/binpatch.py.
+; Written against A/UX 3.1 (AWS 95) /bin/date, 16388 bytes. The binary is stripped: sites are
+; virtual addresses, and names are those of the System V date.c it is built from.
+;
+; date mmddhhmm[yy] sets the clock through gtime(), which adds 1900 to yy and counts years
+; from 1970, so date 1029143026 sets 29 Oct 1970. The new year code takes mmddhhmm[[cc]yy]:
+; four digits are the year, two digits are 1970-1999 for 70-99 and 2000-2069 for 00-69,
+; none keeps the current year (as before). It refuses years outside 1970-2037 (time_t) and
+; anything after the year but the old 'p' (pm) suffix, with "date: bad conversion"; the old
+; code ignored trailing characters, so a four-digit year would have set 2020 for 2026.
+file /bin/date
+
+; gtime (0x750) has read month (d4), day (-4(a6)), hour (-8(a6)) and minute (-12(a6)), all
+; range-checked except the hour; 0x808 is its "return 1" exit and 0x80a the epilogue, which
+; the code above branches to, so they stay and the year code moves to after them. d3 holds
+; the year as years since 1900: 1900 is a multiple of 4, so the leap test (year & 3) holds.
+at 0x7c0                    ; was: year = gpair(); ... (dead from here to 0x808)
+check 2bf11ce81aa2a37a
+new 60 00 00 52             ; bra.w   0x814
+
+at 0x814                    ; was: timbuf = 0; year += 1900; ... return 0 (up to gpair)
+check 405dd0dcb058edde
+new 61 00 00 f8             ; bsr.w   gpair (0x90e)       next two digits, or -1
+new 26 00                   ; move.l  d0,d3
+new 6d 22                   ; blt.b   now                 no year
+new 61 00 00 f0             ; bsr.w   gpair
+new 4a 80                   ; tst.l   d0
+new 6d 0e                   ; blt.b   yy                  two digits
+new c6 fc 00 64             ; mulu.w  #100,d3             four: cc * 100 + yy - 1900
+new d6 80                   ; add.l   d0,d3
+new 04 83 00 00 07 6c       ; subi.l  #1900,d3
+new 60 26                   ; bra.b   ampm
+new 70 46                   ; yy:  moveq #70,d0           00-69 are 2000-2069
+new b6 80                   ; cmp.l   d0,d3
+new 6c 20                   ; bge.b   ampm
+new 70 64                   ; moveq   #100,d0
+new d6 80                   ; add.l   d0,d3
+new 60 1a                   ; bra.b   ampm
+new 48 6e ff f0             ; now: pea -16(a6)            year = localtime(time())->tm_year
+new 4e b9 47 f0 21 d4       ; jsr     time
+new 48 6e ff f0             ; pea     -16(a6)
+new 4e b9 00 00 1e 56       ; jsr     localtime
+new 50 8f                   ; addq.l  #8,sp
+new 26 28 00 14             ; move.l  20(a0),d3
+new 20 79 00 40 52 5c       ; ampm: movea.l cbp,a0        what follows the year
+new 10 10                   ; move.b  (a0),d0
+new 67 0e                   ; beq.b   hour
+new 0c 00 00 70             ; cmpi.b  #'p',d0
+new 66 a0                   ; bne.b   0x808               return 1
+new 06 ae 00 00 00 0c ff f8 ; addi.l  #12,-8(a6)          hour += 12
+new 20 2e ff f8             ; hour: move.l -8(a6),d0      0 <= hour <= 23
+new 6d 92                   ; blt.b   0x808
+new 72 17                   ; moveq   #23,d1
+new b0 81                   ; cmp.l   d1,d0
+new 6e 8c                   ; bgt.b   0x808
+new 70 46                   ; moveq   #70,d0              1970 <= year <= 2037
+new b6 80                   ; cmp.l   d0,d3
+new 6d 00 ff 86             ; blt.w   0x808
+new 0c 83 00 00 00 8a       ; cmpi.l  #138,d3
+new 6c 00 ff 7c             ; bge.w   0x808
+new 72 00                   ; moveq   #0,d1               d1 = days since 1970
+new 74 46                   ; moveq   #70,d2
+new b4 83                   ; years: cmp.l d3,d2
+new 6c 12                   ; bge.b   leap
+new 06 81 00 00 01 6d       ; addi.l  #365,d1
+new 70 03                   ; moveq   #3,d0
+new c0 82                   ; and.l   d2,d0
+new 66 02                   ; bne.b   1f
+new 52 81                   ; addq.l  #1,d1
+new 52 82                   ; 1: addq.l #1,d2
+new 60 ea                   ; bra.b   years
+new 70 03                   ; leap: moveq #3,d0           29 Feb this year, from March
+new c0 83                   ; and.l   d3,d0
+new 66 08                   ; bne.b   months
+new 70 03                   ; moveq   #3,d0
+new b8 80                   ; cmp.l   d0,d4
+new 6d 02                   ; blt.b   months
+new 52 81                   ; addq.l  #1,d1
+new 53 84                   ; months: subq.l #1,d4        while (--month)
+new 67 0a                   ; beq.b   days
+new d2 b0 4d b0 00 40 0e a4 ; add.l   (dmsize-4,d4.l*4),d1     dmsize[month - 1]
+new 60 f2                   ; bra.b   months
+new d2 ae ff fc             ; days: add.l -4(a6),d1       + day - 1
+new 53 81                   ; subq.l  #1,d1
+new c2 fc 00 18             ; mulu.w  #24,d1
+new d2 ae ff f8             ; add.l   -8(a6),d1           + hour
+new 4c 3c 10 00 00 00 00 3c ; mulu.l  #60,d1
+new d2 ae ff f4             ; add.l   -12(a6),d1          + minute
+new 4c 3c 10 00 00 00 00 3c ; mulu.l  #60,d1
+new 23 c1 00 40 52 60       ; move.l  d1,timbuf
+new 70 00                   ; moveq   #0,d0
+new 60 00 ff 1a             ; bra.w   0x80a
+
+; The digit formatter (0x970: n digits of i at p) makes the tens digit i / 10 + '0', so
+; %y and %D print tm_year 126 (2026) as "<6". Two-digit fields take i % 100 first, as the
+; three-digit case already does after its hundreds digit; the other two-digit fields are
+; all below 100.
+at 0x998                    ; was: beq.b 0x9c6 (case 2: tens digit)
+check 0e6cef1adb2f24dd
+new 67 14                   ; beq.b   0x9ae (i %= 100, then tens and units)
