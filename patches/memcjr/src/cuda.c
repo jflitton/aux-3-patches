@@ -14,11 +14,11 @@
  * valid_packet, the byte-count tables, resprec and the fdb/key completions.
  * Polled like the original; callers run at spl1 or above.
  *
- * Only a Quadra 605 gets Cuda signalling. A/UX's Egret machines (IIsi, IIvi, IIvx,
- * Performa 600, Quadra 900 and 950) reach the same entry points, and there the Egret is
- * left alone: resets do nothing, requests fail as on a timeout, and interrupts are only
- * acknowledged. That keeps a 605 disk booted on one of them from driving the Egret's
- * handshake lines the Cuda way; this patch does not support them.
+ * Only a Quadra 605 or LC/Performa 475 gets Cuda signalling. A/UX's Egret machines (IIsi,
+ * IIvi, IIvx, Performa 600, Quadra 900 and 950) reach the same entry points, and there the
+ * Egret is left alone: resets do nothing, requests fail as on a timeout, and interrupts are
+ * only acknowledged. That keeps a patched disk booted on one of them from driving the
+ * Egret's handshake lines the Cuda way; this patch does not support them.
  */
 
 typedef unsigned char u8;
@@ -47,9 +47,9 @@ extern void	(*fdb_completion)(u8 *);
 extern void	(*key_completion)(void);
 extern u8	keysw_position;
 extern u8	resprec[];
-extern short	machineID;		/* Gestalt - 2 */
 
-#define ON605	((machineID & ~1) == 0x5c)	/* 0x5c 25MHz, 0x5d 33MHz */
+/* boot605.S: 1 on a Quadra 605 or LC/Performa 475, from machineID */
+extern int	ismemcjr(void);
 
 #define VIA1	((volatile u8 *)0x50000000)
 #define vBufB	0x0000
@@ -234,7 +234,7 @@ receive_unsolicited(int primed)
 	u8 buf[16];
 	int len;
 
-	if (!ON605)
+	if (!ismemcjr())
 		return;
 	rx.data = buf;
 	rx.max = sizeof buf;
@@ -249,7 +249,7 @@ cuda_dispatch(struct egretpb *pb)
 	struct rx rx;
 	int s, i, r, tries;
 
-	if (!ON605) {
+	if (!ismemcjr()) {
 		pb->result = -1;
 		return 0;
 	}
@@ -336,7 +336,7 @@ pseudo(int cmd, int arg)
 void
 cuda_reset(void)
 {
-	if (!ON605)
+	if (!ismemcjr())
 		return;
 	via_w(vDirB, (VIA1[vDirB] | TACK | TIP) & ~TREQ);
 	via_w(vACR, (VIA1[vACR] & ~SR_CTRL) | SR_EXT);

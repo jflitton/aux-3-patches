@@ -6,7 +6,7 @@ Apple software is included.
 
 | Patch | Option | What it does | A/UX | Macs |
 |---|---|---|---|---|
-| [MEMCjr](patches/memcjr/README.md) | `--memcjr ENABLER` | Runs A/UX on the Quadra 605 | 3.1 | Quadra 605 with a full 68040 |
+| [MEMCjr](patches/memcjr/README.md) | `--memcjr ENABLER` | Runs A/UX on the Quadra 605, and in theory the LC/Performa 475 | 3.1 | Quadra 605 with a full 68040; LC 475 and Performa 475/476 untested |
 | [DaynaPORT](patches/daynaport/README.md) | `--daynaport` | Networking over a BlueSCSI's or ZuluSCSI's Wi-Fi | 3.1 | Tested on the Quadra 605 |
 | [Date](patches/date/README.md) | `--date` | `date` works with years after 1999 | 3.1 | Any |
 

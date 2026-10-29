@@ -1,8 +1,8 @@
 /*
- * Quadra 605 boot hooks for the A/UX kernel, linked after the Cuda transport in the
- * dead Egret code (src/kernel605.ld; .text.boot605.extra, the MMU-on hooks and the
- * ProductInfo buffer, goes in egret_reset's dead body). Kernel call sites are redirected here by the patch that kernel-patch.py
- * generates:
+ * Quadra 605 and LC/Performa 475 boot hooks for the A/UX kernel, linked after the Cuda
+ * transport in the dead Egret code (src/kernel605.ld; .text.boot605.extra, the MMU-on hooks
+ * and the ProductInfo buffer, goes in egret_reset's dead body). Kernel call sites are
+ * redirected here by the patch that kernel-patch.py generates:
  *
  *   boardinit's switch    -> b605_switch   (MMU off)
  *   _start: jsr boardinit -> b605_board    (MMU off)
@@ -16,14 +16,29 @@
  * only through pstart, which is identity-mapped. Every hook leaves other machines alone.
  * DAFB monitor sensing is A/UX's own (DAFBReadSenseLines), as on a Centris 650.
  *
- * The 605's machineID (Gestalt - 2) follows its clock: the ROM picks its ProductInfo by
- * the CPU ID register, whose low bits give the speed ($2225: 25MHz, Gestalt 94; $2226:
- * 33MHz, Gestalt 95), so a 33MHz 605 is 0x5d.
+ * The machineID (Gestalt - 2) follows the clock: the ROM picks its ProductInfo by the CPU
+ * ID register, whose low bits give the speed. Quadra 605: $2225 25MHz (Gestalt 94), $2226
+ * 33MHz (Gestalt 95), so 0x5c and 0x5d. LC 475 and Performa 475/476: $2221 25MHz
+ * (Gestalt 89), $2222 33MHz (Gestalt 90), so 0x57 and 0x58. The ROM's 475 records differ
+ * from the 605's only in ProductKind and CPU ID, so the 475 gets the 605's treatment; it is
+ * untested on a real 475.
  */
 
 QUADRA605 = 0x5c		/* 25MHz; 33MHz is QUADRA605 + 1 */
+LC475 = 0x57			/* 25MHz; 33MHz is LC475 + 1 */
 CENTRIS650 = 0x1c
 MEMCJR_HOLD = 0x50f0e07c	/* upper six bits of 12-bit DAFB/MEMCjr registers */
+PI_CPUID = 0x45			/* ProductInfo: low byte of the CPU ID; bit 1 set at 33MHz */
+
+/* d0.w = machineID: branch to \yes on the Macs this patch supports; d0 changed */
+	.macro	IFMEMCJR yes
+	sub.w	#LC475,%d0
+	cmp.w	#1,%d0
+	jbls	\yes			/* LC475, LC475 + 1 */
+	subq.w	#QUADRA605-LC475,%d0
+	cmp.w	#1,%d0
+	jbls	\yes			/* QUADRA605, QUADRA605 + 1 */
+	.endm
 
 /*
  * Checkpoint build (CKPT_BUILD, build.sh with CKPT=1): holding a key
@@ -42,38 +57,45 @@ MEMCJR_HOLD = 0x50f0e07c	/* upper six bits of 12-bit DAFB/MEMCjr registers */
 
 	.section .text.boot605,"ax"
 
-/* Z set if this is a 605 (either speed); all registers kept */
-is605:
-	move.l	%d0,-(%sp)
+/*
+ * int ismemcjr(void): 1 on a 605 or a 475 (either speed), else 0, with the condition codes
+ * set from it. Only d0 changes, so cuda.c calls it too.
+ */
+	.globl	ismemcjr
+ismemcjr:
 	move.w	machineID,%d0
-	and.w	#~1,%d0
-	cmp.w	#QUADRA605,%d0
-	movem.l	(%sp)+,%d0		/* movem keeps the condition codes */
+	IFMEMCJR 1f
+	moveq	#0,%d0
+	rts
+1:	moveq	#1,%d0
 	rts
 
 /*
  * In place of boardinit's "move.w machineID,d0; ext.l d0; bra switch": take the
- * Centris 650 case (djMEMC/IOSB: 53C96, SWIM, SCC, sound, DAFB) for the 605, but only
- * here; machineID stays as it is for every other user.
+ * Centris 650 case (djMEMC/IOSB: 53C96, SWIM, SCC, sound, DAFB) for the 605 and 475, but
+ * only here; machineID stays as it is for every other user.
  */
 	.globl	b605_switch
 b605_switch:
 	CKPT	2			/* setupProductInfo done */
+	jbsr	ismemcjr
+	jbne	1f
 	move.w	machineID,%d0
 	ext.l	%d0
-	jbsr	is605
-	jbne	1f
-	moveq	#CENTRIS650,%d0
-1:	jmp	boardinit_switch
+	jbra	2f
+1:	moveq	#CENTRIS650,%d0
+2:	jmp	boardinit_switch
 
 /*
- * Wraps the call to boardinit. On the 605:
+ * Wraps the call to boardinit. On the 605 and 475:
  *   devices[1] = 1  Egret present: the Cuda transport stands in for it (ADB, RTC,
  *                   PRAM, power off, reboot)
  *   devices[5] = 0  size RAM with the generic banksize probe, not memcdjsize
  *                   (MEMCjr is not djMEMC)
  *   cpuspeed = 25 or 33 (MHz)  scales the SCSI timeout loops; the C650 case sets it
- *                   only for 0x1c
+ *                   only for 0x1c. Taken from the CPU ID in ProductInfo, as the ROM's
+ *                   video init does: machineID's low bit means 33MHz on the 605 but
+ *                   25MHz on the 475.
  * and builds the ProductInfo copy that b605_lowmem installs.
  */
 	.globl	b605_board
@@ -85,16 +107,17 @@ b605_board:
 	jsr	boardinit
 	CKPT	8			/* boardinit done */
 	CKPT	20			/* the same, restarting as the first ckpt image did */
-	jbsr	is605
-	jbne	1f
+	jbsr	ismemcjr
+	jbeq	1f
 	move.b	#1,devices+1
 	clr.b	devices+5
+	jbsr	b605_prodinfo
 	moveq	#25,%d0
-	btst	#0,machineID+1
+	lea	pi_buf(%pc),%a0		/* physical */
+	btst	#1,PI_CPUID(%a0)
 	jbeq	2f
 	moveq	#33,%d0
 2:	move.l	%d0,cpuspeed
-	jbsr	b605_prodinfo
 1:	rts
 
 /*
@@ -157,8 +180,8 @@ pi_offsets:
  */
 	.globl	b605_banksize
 b605_banksize:
-	jbsr	is605
-	jbeq	1f
+	jbsr	ismemcjr
+	jbne	1f
 	jmp	banksize
 1:	movem.l	%d2-%d7/%a2-%a4,-(%sp)
 	move.l	9*4+12(%sp),%a2		/* bank */
@@ -251,23 +274,24 @@ ram_end:
 	.globl	b605_lowmem
 b605_lowmem:
 	CKPT	10			/* MMU on */
-	jbsr	is605
-	jbne	1f
+	jbsr	ismemcjr
+	jbeq	1f
 	move.l	#pi_buf,ProductInfoPtr
 1:	jmp	setup_lowmem_globals
 
 /*
- * In place of vadrspace's "jsr setup_autovectors". The 605 interrupts at levels 1 (VIA1),
- * 2 (VIA2) and 4 (SCC). Past the Quadra 700, A/UX leaves levels 3 and 5 on faulthdlr (an
- * "unexpected kernel trap" panic) and 6 on powerintr (SIGPWR to init). A 33MHz 605 took
- * a stray level 3 (trap type 27) at IPL 2 in the SCSI interrupt, root already mounted:
- * most likely the IPL lines reading 3 for a moment between levels 1 and 2. Point 3, 5
- * and 6 at nointr (rte), as setup_autovectors itself does for the Quadra 700 and older.
+ * In place of vadrspace's "jsr setup_autovectors". The 605 and 475 interrupt at levels 1
+ * (VIA1), 2 (VIA2) and 4 (SCC). Past the Quadra 700, A/UX leaves levels 3 and 5 on
+ * faulthdlr (an "unexpected kernel trap" panic) and 6 on powerintr (SIGPWR to init). A
+ * 33MHz 605 took a stray level 3 (trap type 27) at IPL 2 in the SCSI interrupt, root
+ * already mounted: most likely the IPL lines reading 3 for a moment between levels 1 and
+ * 2. Point 3, 5 and 6 at nointr (rte), as setup_autovectors itself does for the Quadra
+ * 700 and older.
  */
 	.globl	b605_vectors
 b605_vectors:
-	jbsr	is605
-	jbne	1f
+	jbsr	ismemcjr
+	jbeq	1f
 	move.l	#nointr,%d0
 	move.l	%d0,autovec+8		/* level 3 */
 	move.l	%d0,autovec+16		/* level 5 */
@@ -281,14 +305,14 @@ b605_vectors:
  * hands that d0 on as _ReadXPRam's and _WriteXPRam's result. So in the kernel every slot
  * PRAM read "failed": the DAFB driver's Open gave up before reading its PRAM flags, and
  * its mode sets then left out the MEMCjr pipeline correction to HAL/HFP (picture shifted
- * left, more at lower depths; Thousands broken). On the 605, return pbResult, with the
- * condition codes set from it; elsewhere, as before. A/UX's own callers of ReadXPRam and
- * WriteXPRam ignore d0.
+ * left, more at lower depths; Thousands broken). On the 605 and 475, return pbResult,
+ * with the condition codes set from it; elsewhere, as before. A/UX's own callers of
+ * ReadXPRam and WriteXPRam ignore d0.
  */
 	.globl	b605_egret
 b605_egret:
-	jbsr	is605
-	jbne	1f
+	jbsr	ismemcjr
+	jbeq	1f
 	move.l	4(%sp),-(%sp)		/* the parameter block aEgretDispatch pushed */
 	jsr	cEgretDispatch
 	addq.l	#4,%sp
@@ -316,20 +340,20 @@ ckpt:
 	rtd	#2
 
 /*
- * As A/UX's doboot: the ROM's restart entry. On the 605, first empty MEMCjr's holding
- * register, which every DAFB read loads and the next register write ORs in, so the ROM's
- * start-up writes do not inherit it. Checkpoint 20 skips that, as the first checkpoint
- * image did.
+ * As A/UX's doboot: the ROM's restart entry. On the 605 and 475, first empty MEMCjr's
+ * holding register, which every DAFB read loads and the next register write ORs in, so
+ * the ROM's start-up writes do not inherit it. Checkpoint 20 skips that, as the first
+ * checkpoint image did. (Its own test: ismemcjr is in .text, not reachable from here
+ * with the MMU off.)
  */
 ckpt_restart:				/* d0 = checkpoint */
 	move.w	#0x2700,%sr
 	cmp.b	#20,%d0
 	jbeq	1f
 	move.w	machineID,%d0
-	and.w	#~1,%d0
-	cmp.w	#QUADRA605,%d0
-	jbne	1f
-	clr.l	MEMCJR_HOLD
+	IFMEMCJR 2f
+	jbra	1f
+2:	clr.l	MEMCJR_HOLD
 1:	jmp	0x4080000a
 
 /*

@@ -1,4 +1,4 @@
-/* Link the Cuda transport (cuda.c) and the 605 boot hooks (boot605.S) over cEgretDispatch
+/* Link the Cuda transport (cuda.c) and the boot hooks (boot605.S) over cEgretDispatch
    and the Egret helpers they replace, all dead once the stubs are in, and the MMU-on hooks
    and the hooks' data over egret_reset's body after its jmp stub. A checkpoint build's
    .text.ckpt goes over orwellsize in pstart (only Orwell machines call it).

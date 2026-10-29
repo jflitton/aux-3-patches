@@ -575,12 +575,50 @@ and left alone (Jeff, 2026-10-29). A persistent OR of levels 1 and 2 is ruled ou
 `nointr` it would livelock as soon as VIA1 and the SCSI interrupt overlapped, and v5 onward
 runs normally.
 
+### 2026-10-29: the LC/Performa 475, in theory (untested on hardware)
+**Why it should work.** The LC 475 and Performa 475/476 use the 605's ROM. Its MEMCjr
+ProductInfo table (ROM+$A8038, $48 per record) has the 475 at kind 0x53 (CPU ID $2221,
+25MHz) and 0x54 ($2222, 33MHz), next to the 605's 0x58 and 0x59. With the self-relative
+pointers resolved, the 475 records point at the same decoder, RAM, video and routine tables
+as the 605's and differ only at +$12 (ProductKind) and +$44 (CPU ID). Linux gives the
+Performa 475 (Gestalt 89, 90) the 605's Cuda, VIA, SCSI and floppy types; its SCC type
+differs (`MAC_SCC_II`, not `MAC_SCC_QUADRA`), but Linux uses that only to single out PSC
+machines, and takes the SCC address from the booter. So the 475 gets the 605's treatment.
+Every other kernel `machineID` test compares with IDs up to 0x39, so 0x57/0x58 take the
+same paths as 0x5c/0x5d.
+
+**Changes.**
+- `ismemcjr` in `boot605.S` (was `is605`): machineID 0x57, 0x58, 0x5c or 0x5d. It now
+  returns d0 = 1/0 with the condition codes set, and `cuda.c` calls it instead of its own
+  `ON605`, so the test is in one place (the checkpoint restart keeps an inline copy,
+  `IFMEMCJR`, as it runs in pstart). .text 1924 bytes, 2 less than before (checkpoint build
+  1980 of 2028).
+- `cpuspeed`: machineID's low bit means 33MHz on the 605 but 25MHz on the 475, so it now
+  comes from bit 1 of the CPU ID's low byte (ProductInfo+$45), as the ROM's video init
+  reads it; true at 33MHz in all four records.
+- Toolbox (`toolbox-605.txt`): four BoxFlags don't fit the old 20 bytes. The site now runs
+  to the jump table (36 bytes): the old range check, its `bhi`, the table dispatch and the
+  `swbeg` header (`4afc 001e`), dead behind the `jmp`. Two unsigned range tests against
+  d1 = 1 (0x53-0x54, 0x58-0x59), then the old range check in word operations and the
+  dispatch moved up 4 bytes. d1 is free: the only caller, `doVariables`, calls
+  `InitUniversalPtr` next and sets d1 before using it. Run under unicorn (68040) for all 256
+  BoxFlags, original vs patched, on 3.1's and 3.0.1's `Patch.067C`: only 0x53, 0x54, 0x58,
+  0x59 change (to 0x10), `realBoxFlag` unchanged. The spec verifies on all three copies.
+
+**MAME.** `maclc475` has a 68LC040, so the test is `macqd605` with the CPU ID tap
+(`CPUID=2221` / `2222` in `tools/mame-snap.lua`), `-ram 128M`, a `make-disk.sh --memcjr
+--date` disk: Mac OS 7.1 with Enabler 065 accepts the 475, and A/UX reaches the Finder (t≈132
+s at $2221), as do $2225, $2226 and QEMU q800. Read back at t=150: machineID 0x57 / 0x58,
+cpuspeed 25 / 33, devices[1] = 1 (0x5c / 0x5d, 25 / 33 for the 605). No real 475 has run it.
+
 ## Open items
 - Real 605 (33MHz): A/UX 3.1 boots to the Finder with correct video at every depth (v7).
   A/UX's `_EgretDispatch` returning 1 for success is fixed on the 605 only; other Egret
   machines have the same convention, not touched.
-- The patch is for the Quadra 605 only; A/UX's Egret machines (IIsi, IIvi, IIvx, Performa
-  600, Q900, Q950) must use unpatched media (the kernel guard only keeps it harmless there).
+- The patch is for the Quadra 605, and in theory the LC/Performa 475 (MAME only, see
+  above); A/UX's Egret machines (IIsi, IIvi, IIvx, Performa 600, Q900, Q950) must use
+  unpatched media (the kernel guard only keeps it harmless there).
+- A real 475 (with a full 68040): first run, ideally with the checkpoint kernel at hand.
 - Deliverable (Jeff, 2026-10-29): `tools/make-605-disk.sh` patching an existing, installed
   A/UX 3.1 HD image into a 605 disk. No install-from-media flow and no patched install media,
   so there is no installer to restrict to the 605.

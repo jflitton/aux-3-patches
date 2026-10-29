@@ -12,7 +12,8 @@ Usage: ./make-disk.sh AUX-IMAGE NEW-DISK PATCHES... [network settings]
   NEW-DISK   the patched copy to make, e.g. ~/Desktop/HD0_AUX.hda
 
 Patches (choose one or more):
-  --memcjr ENABLER     MEMCjr support, for the Quadra 605. ENABLER is System
+  --memcjr ENABLER     MEMCjr support, for the Quadra 605 (and, untested, the
+                       LC 475 and Performa 475/476). ENABLER is System
                        Enabler 065 as you downloaded it,
                        e.g. System_Enabler_065_12-sea.bin
   --daynaport          DaynaPORT networking, for a BlueSCSI or ZuluSCSI with Wi-Fi
@@ -55,7 +56,7 @@ is_aux31() {
 }
 
 NEEDS_memcjr="hmount:hfsutils unar:unar"
-title_memcjr() { say "MEMCjr support (Quadra 605)"; }
+title_memcjr() { say "MEMCjr support (Quadra 605; LC/Performa 475 untested)"; }
 check_memcjr() {
 	[ -f "$enabler" ] || die "Can't find System Enabler 065: $enabler"
 	lsar "$enabler" 2>/dev/null | grep -q 065 ||

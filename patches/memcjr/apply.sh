@@ -1,9 +1,9 @@
 #!/bin/sh
-# MEMCjr support (the Quadra 605), applied in place to an A/UX 3.1 disk image (use a copy:
-# DISK is changed):
+# MEMCjr support (the Quadra 605; the LC/Performa 475, untested), applied in place to an
+# A/UX 3.1 disk image (use a copy: DISK is changed):
 #   patches/memcjr/apply.sh DISK System_Enabler_065_12-sea.bin
 # DISK gets
-#   - System Enabler 065 in the Mac OS System Folder (System 7.1 needs it to boot a 605),
+#   - System Enabler 065 in the Mac OS System Folder (System 7.1 needs it on these Macs),
 #   - the kernel patch on /unix and /etc/config.d/newunix (bin/kernel-605.txt),
 #   - the Toolbox patch (src/toolbox-605.txt).
 # CKPT=1 builds and uses the checkpoint kernel (see src/boot605.S) instead; that needs the

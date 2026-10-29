@@ -1,21 +1,36 @@
-; A/UX Toolbox (user-mode Mac environment) changes for the Quadra 605.
+; A/UX Toolbox (user-mode Mac environment) changes for the Quadra 605 and LC/Performa 475.
 ; Apply with tools/binpatch.py. Written against A/UX 3.1 (AWS 95) /mac/lib/Patches.
 
 ; GetLowFromKernel saves the kernel's BoxFlag in realBoxFlag (Gestalt 'mach' = it + 6) and
 ; then rewrites BoxFlag to 0x10 (Quadra 700) for the machines System 7.0.1 predates
 ; (0x18 C650, 0x1D Q800, 0x1E Q650, 0x2E C610, 0x2F Q610, 0x35), because the System's
 ; 'boot' 2 resource refuses any BoxFlag above 0x14 with SysError(102), "This startup disk
-; will not work on this Macintosh model". Add the 605: 0x58 at 25MHz, 0x59 at 33MHz (the
-; ROM picks the record by the CPU ID register, $2225 / $2226). The second, redundant load
-; of BoxFlag into d0 makes room for the two tests; the range check that follows is the
-; same with word operations (the jump table indexes with d0.w), and ends on the original
-; bhi.b at +0x4e.
+; will not work on this Macintosh model". Add the 475, 0x53 at 25MHz and 0x54 at 33MHz
+; (untested), and the 605, 0x58 at 25MHz and 0x59 at 33MHz (the ROM picks the record by
+; the CPU ID register: $2221 / $2222, $2225 / $2226).
+;
+; The site runs from the redundant second load of BoxFlag into d0 to the jump table: the
+; old range check, its bhi, the table dispatch and the 4-byte swbeg header (illegal; dc.w
+; 30) that the jmp skips. Each pair is one unsigned range test against d1 = 1. d1 is a
+; scratch register to C callers, and the only caller, doVariables, goes straight on to
+; call InitUniversalPtr and sets d1 itself before using it. The range check is the old one
+; with word operations (the table indexes with d0.w), and the dispatch is the old one,
+; moved up 4 bytes against the same table.
 file /mac/lib/Patches/Patch.067C
-at GetLowFromKernel+0x3a   ; was: move.b BoxFlag,d0; extb.l d0; subi.l #$18,d0; cmpi.l #$1d,d0
-check 7fb300a60401f333
-new 0c 00 00 58            ; cmpi.b  #$58,d0          d0 = BoxFlag already
-new 67 ca                  ; beq.b   GetLowFromKernel+0xa (BoxFlag = 0x10)
-new 0c 00 00 59            ; cmpi.b  #$59,d0
-new 67 c4                  ; beq.b   GetLowFromKernel+0xa
-new 04 40 00 18            ; subi.w  #$18,d0
+at GetLowFromKernel+0x3a   ; was: move.b BoxFlag,d0; extb.l d0; subi.l #$18,d0; cmpi.l #$1d,d0;
+                           ;      bhi.b; add.w; move.w (table,pc,d0.w),d0; jmp (table,pc,d0.w);
+                           ;      swbeg
+check d7b574f7d84fd99b
+new 72 01                  ; moveq   #1,d1            d0 = BoxFlag already
+new 04 40 00 53            ; subi.w  #$53,d0
+new b0 41                  ; cmp.w   d1,d0
+new 63 c6                  ; bls.b   GetLowFromKernel+0xa (BoxFlag = 0x10): 0x53, 0x54
+new 5b 40                  ; subq.w  #5,d0
+new b0 41                  ; cmp.w   d1,d0
+new 63 c0                  ; bls.b   GetLowFromKernel+0xa: 0x58, 0x59
+new 06 40 00 40            ; addi.w  #$40,d0          d0 = BoxFlag - $18
 new 0c 40 00 1d            ; cmpi.w  #$1d,d0
+new 62 be                  ; bhi.b   GetLowFromKernel+0x12 (leave BoxFlag)
+new d0 40                  ; add.w   d0,d0
+new 30 3b 00 06            ; move.w  (GetLowFromKernel+0x5e,pc,d0.w),d0
+new 4e fb 00 02            ; jmp     (GetLowFromKernel+0x5e,pc,d0.w)

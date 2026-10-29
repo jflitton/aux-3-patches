@@ -115,6 +115,10 @@ MAME's `macqd605` is a 25 MHz 605. It has no DaynaPORT, so the driver reports no
     mame macqd605 -ram 128M -hard CLONE.hd -autoboot_script tools/mame-snap.lua \
       -snapshot_directory DIR -video none -sound none -nothrottle -seconds_to_run 170
 
+With `mame-snap.lua`, `CPUID=2226 mame ...` makes it a 33 MHz 605, and `CPUID=2221` or
+`2222` an LC/Performa 475 at 25 or 33 MHz. That is the only way to run the 475 with a full
+68040: MAME's own `maclc475` has a 68LC040.
+
 For a console log, run the probe instead: `OUT=log STOP=200 PATCHED=1 EXECLOG=1 mame ...
 -debug -debugger none -autoboot_script tools/mame-605-probe.lua`, then
 `python3 -I tools/probe-log.py KERNEL log`. `CKPT=1 patches/memcjr/apply.sh CLONE.hd
