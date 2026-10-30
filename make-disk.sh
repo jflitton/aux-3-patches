@@ -51,7 +51,8 @@ die() { say "" "$*" >&2; exit 1; }
 # --- the patches -------------------------------------------------------------------
 #
 # A patch NAME lives in patches/NAME, and has an option (in the argument loop below) and:
-#   NEEDS_NAME    programs it uses, as "program:Homebrew-package ..."
+#   NEEDS_NAME    programs it uses, as "program:package ..." (the package's name in
+#                 Homebrew, apt and dnf alike)
 #   title_NAME    what it is, for the progress lines
 #   check_NAME    run on the A/UX disk before anything is written; dies if the patch
 #                 can't go on it
@@ -101,7 +102,7 @@ check_date() {
 }
 apply_date() { run sh patches/date/apply.sh "$out"; }
 
-NEEDS_daynaport=
+NEEDS_daynaport="cmp:diffutils"
 title_daynaport() {
 	if [ -n "$ip" ]; then say "DaynaPORT networking, set to IP address $ip"
 	else say "DaynaPORT networking"; fi
@@ -187,7 +188,9 @@ cd "$(dirname "$0")" || exit 1
 
 # Homebrew's programs, in case this Terminal window doesn't know about them yet
 PATH=$PATH:/opt/homebrew/bin:/usr/local/bin
+mac=; [ "$(uname)" = Darwin ] && mac=1
 if ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' 2>/dev/null; then
+	[ -n "$mac" ] || die "This needs Python 3.9 or later."
 	die "Python 3 isn't ready on this Mac. Install Homebrew (https://brew.sh), which also
 installs Apple's command line tools and Python 3, then run this again."
 fi
@@ -199,6 +202,7 @@ for p in $chosen; do
 			case " $missing " in *" ${need#*:} "*) ;; *) missing="$missing ${need#*:}" ;; esac
 	done
 done
+[ -n "$missing" ] && [ -z "$mac" ] && die "This needs these packages installed:$missing"
 if [ -n "$missing" ]; then
 	die "Some tools are missing. Install them with Homebrew (https://brew.sh):
 
@@ -257,7 +261,8 @@ done
 if [ "$src" != "$out" ]; then
 	say "  Copying $name ..."
 	made=1
-	run cp -c "$aux" "$out" || run cp "$aux" "$out" || fail "couldn't copy $name."
+	# a clone on APFS (cp -c, macOS only) or Btrfs (GNU cp's default), else a copy
+	cp -c "$aux" "$out" 2>/dev/null || run cp "$aux" "$out" || fail "couldn't copy $name."
 fi
 chmod u+w "$out"
 added=

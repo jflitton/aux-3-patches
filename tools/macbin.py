@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Wrap a macOS file (data fork + resource fork + FinderInfo) as MacBinary II.
+"""Wrap a Mac file, as `unar -k visible` extracts it, as MacBinary II.
 
-  macbin.py SRC OUT.bin [MACNAME]
+  macbin.py SRC.rsrc OUT.bin [MACNAME]
 
-Reads the resource fork from SRC/..namedfork/rsrc and type/creator/flags from the
-com.apple.FinderInfo xattr, so `hcopy -m OUT.bin :Folder:` recreates the file on HFS.
+SRC.rsrc is the AppleDouble file unar writes beside the data fork (SRC, missing if the data
+fork is empty): it holds the resource fork and the Finder info (type, creator, flags). The
+same on macOS and Linux, so `hcopy -m OUT.bin :Folder:` recreates the file on HFS.
 """
-import os, struct, subprocess, sys, time
+import os, struct, sys
 
 MAC_EPOCH = 2082844800  # 1904-01-01 relative to 1970-01-01
+APPLEDOUBLE = 0x00051607
+RSRC, FINDER_INFO = 2, 9  # AppleDouble entry IDs
 
 
 def crc16_xmodem(data):
@@ -21,18 +24,27 @@ def crc16_xmodem(data):
     return crc
 
 
-def finder_info(path):
-    out = subprocess.run(['xattr', '-px', 'com.apple.FinderInfo', path],
-                         capture_output=True, text=True, check=True).stdout
-    return bytes.fromhex(out.replace(' ', '').replace('\n', ''))
+def appledouble(path):
+    """The entries of an AppleDouble file, by ID."""
+    ad = open(path, 'rb').read()
+    magic, n = struct.unpack('>I20xH', ad[:26])
+    if magic != APPLEDOUBLE:
+        sys.exit(f'{path} is not an AppleDouble file')
+    entries = {}
+    for i in range(n):
+        eid, off, length = struct.unpack('>III', ad[26 + 12 * i:38 + 12 * i])
+        entries[eid] = ad[off:off + length]
+    return entries
 
 
 def main():
     src, dst = sys.argv[1], sys.argv[2]
-    name = (sys.argv[3] if len(sys.argv) > 3 else os.path.basename(src)).encode('mac_roman')
-    data = open(src, 'rb').read()
-    rsrc = open(os.path.join(src, '..namedfork', 'rsrc'), 'rb').read()
-    fi = finder_info(src)
+    base = src[:-len('.rsrc')] if src.endswith('.rsrc') else src
+    name = (sys.argv[3] if len(sys.argv) > 3 else os.path.basename(base)).encode('mac_roman')
+    ad = appledouble(src)
+    data = open(base, 'rb').read() if base != src and os.path.exists(base) else b''
+    rsrc = ad.get(RSRC, b'')
+    fi = ad.get(FINDER_INFO, b'').ljust(10, b'\0')
     mtime = int(os.stat(src).st_mtime) + MAC_EPOCH
     hdr = bytearray(128)
     hdr[1] = len(name)

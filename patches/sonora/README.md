@@ -27,7 +27,7 @@ Quadras with Orwell and djMEMC memory controllers need.
   A/UX requires one.
 - **System Enabler 003** version 1.1, usually `System_Enabler_003_1.1.sea.bin` (widely
   archived online), as downloaded. Version 1.0 doesn't know the LC III+.
-- `brew install hfsutils unar`.
+- hfsutils and unar (on a Mac, `brew install hfsutils unar`).
 
 ## Compatibility
 

@@ -30,10 +30,10 @@ does that job.
 
 In CommandShell:
 
-- `/etc/dpsetup` sets or changes the network settings. Press Return to accept a value in
-  [brackets]. They take effect at once and at every start.
+- `/etc/dpsetup` sets or changes the network settings. They take effect at once and at
+  every start.
 - `/usr/etc/ping 192.168.1.1 64 3` checks the connection.
-- `passwd` sets a password for `root`. Do this before joining a network you share.
+- `root` has no password: set one with `passwd` before joining a network you share.
 
 ## Compatibility
 

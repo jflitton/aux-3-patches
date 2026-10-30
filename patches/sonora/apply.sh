@@ -26,7 +26,8 @@ trap 'rm -rf "$tmp"' EXIT
 # HFS partition and put it back.
 set -- $($py tools/ufs.py "$disk" find Apple_HFS)
 hfs_start=$2 hfs_blocks=$3
-unar -q -o "$tmp/enabler" "$enabler"
+# the resource fork as an AppleDouble file, NAME.rsrc, as unar writes it on Linux too
+unar -q -k visible -o "$tmp/enabler" "$enabler"
 set -- "$tmp"/enabler/*
 if [ $# -ne 1 ]; then echo "expected one file in $enabler" >&2; exit 1; fi
 $py tools/macbin.py "$1" "$tmp/enabler.bin" "System Enabler 003"

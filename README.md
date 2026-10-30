@@ -11,47 +11,33 @@ Apple software is included.
 | [DaynaPORT](patches/daynaport/README.md) | `--daynaport` | Networking over a BlueSCSI's or ZuluSCSI's Wi-Fi | 3.1 | Tested on the Quadra 605 and LC III |
 | [Date](patches/date/README.md) | `--date` | `date` works with years after 1999 | 3.1 | Any |
 
-## What you need
+## Requirements
 
-- A Mac running macOS, with 3 GB free.
+- macOS or Linux, with Python 3.9 or later.
+- hfsutils and unar, for `--memcjr` and `--sonora` (`brew install hfsutils unar` on macOS).
 - An A/UX 3.1 disk image. Tested with `AUX_3_1_1GB_Use_In_Shoebill.zip`, widely archived
-  online; give the script the zip or the `.dsk` inside it.
-- Whatever your chosen patches need (see their pages).
+  online; pass the zip or the `.dsk` inside it.
+- Whatever your patches need (see their pages).
 
-## Make the disk
+## Usage
 
-1. Install [Homebrew](https://brew.sh) by pasting the command from its home page into
-   Terminal (Applications → Utilities). For MEMCjr or Sonora, also run
-   `brew install hfsutils unar`.
-2. Download this project (on GitHub: **Code → Download ZIP**) and unzip it.
-3. In Terminal, type `cd `, drag the project folder onto the window and press Return. Then
-   run `make-disk.sh` with the A/UX image, a name for the new disk, and your patches:
+    ./make-disk.sh AUX-IMAGE NEW-DISK PATCHES... [--ip ADDRESS ...]
 
-       ./make-disk.sh ~/Downloads/AUX_3_1_1GB_Use_In_Shoebill.zip ~/Desktop/HD0_AUX.hda \
-           --memcjr ~/Downloads/System_Enabler_065_12-sea.bin --daynaport --date \
-           --ip 192.168.1.50
+A Quadra 605 disk with every patch, and an LC III disk:
 
-   For an LC III, use `--sonora ~/Downloads/System_Enabler_003_1.1.sea.bin` in place of
-   `--memcjr …`. `./make-disk.sh --help` lists every option.
+    ./make-disk.sh AUX_3_1_1GB_Use_In_Shoebill.zip HD0_AUX.hda \
+        --memcjr System_Enabler_065_12-sea.bin --daynaport --date --ip 192.168.1.50
+    ./make-disk.sh AUX_3_1_1GB_Use_In_Shoebill.zip HD0_AUX.hda \
+        --sonora System_Enabler_003_1.1.sea.bin --date
 
-## Start A/UX
+`--help` lists every option. If a step fails, the partial disk is removed and the log is
+left in `NEW-DISK.log`; each patch's page covers its own problems.
 
-Mac OS 7.1 starts, then A/UX Startup launches A/UX, logged in as `root` with no password.
-**CommandShell**, in the Apple menu, gives you a Unix command line. If the Mac starts from
-another disk, choose the A/UX disk in the Startup Disk control panel.
+## Running A/UX
 
-Always use **Special → Shut Down** before switching off: cutting the power can damage the
-A/UX disk.
-
-## Troubleshooting
-
-- **"Permission denied":** run `sh make-disk.sh …` instead.
-- **Tools missing:** install them as the script says, then open a new Terminal window.
-- **"Isn't an A/UX 3.1 disk":** these patches are for A/UX 3.1 only.
-- **Anything else:** the script names the step that failed and saves a log next to the new
-  disk's name.
-
-Problems with a particular patch are on its page.
+The disk boots Mac OS 7.1, then A/UX Startup launches A/UX, logged in as `root` with no
+password. CommandShell, in the Apple menu, is the shell. Shut down with **Special → Shut
+Down**: a power cut can damage the A/UX file system.
 
 ## For developers
 

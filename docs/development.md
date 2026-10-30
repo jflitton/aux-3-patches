@@ -100,7 +100,7 @@ The tools run on the system `python3` (3.9 or later) with only the standard libr
 | `tools/elf2coff.py` | Turn an `m68k-elf-ld -r` object into an A/UX COFF module; check it |
 | `tools/ufsput.py` | Write files (up to 16MB) into an A/UX UFS partition (clones only); check a partition like fsck |
 | `tools/ufs.py` | Read-only A/UX UFS reader (partitions, find, ls with device numbers, cat, extract, where) |
-| `tools/macbin.py` | Wrap a macOS file with resource fork as MacBinary II (for `hcopy -m`) |
+| `tools/macbin.py` | Wrap a Mac file, as `unar -k visible` extracts it, as MacBinary II (for `hcopy -m`) |
 | `tools/coff.py`, `tools/auxdis.py` | A/UX COFF reader; symbol-annotated 68040 disassembler |
 | `tools/ksyms-ld.py` | Kernel COFF symbols as a GNU ld script |
 | `tools/kpatch.py` | What the kernel patch generators share: finding patch sites in a kernel, writing them as a binpatch spec |

@@ -22,7 +22,7 @@ It adds System Enabler 065 to the disk's Mac OS, teaches the kernel the 605's Cu
   the floating-point unit A/UX requires.
 - **System Enabler 065** version 1.2, usually `System_Enabler_065_12-sea.bin` (widely
   archived online), as downloaded.
-- `brew install hfsutils unar`.
+- hfsutils and unar (on a Mac, `brew install hfsutils unar`).
 
 ## Compatibility
 
