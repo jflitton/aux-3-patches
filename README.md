@@ -7,7 +7,8 @@ Apple software is included.
 | Patch | Option | What it does | A/UX | Macs |
 |---|---|---|---|---|
 | [MEMCjr](patches/memcjr/README.md) | `--memcjr ENABLER` | Runs A/UX on the Quadra 605, and in theory the LC/Performa 475 | 3.1 | Quadra 605 with a full 68040; LC 475 and Performa 475/476 untested |
-| [DaynaPORT](patches/daynaport/README.md) | `--daynaport` | Networking over a BlueSCSI's or ZuluSCSI's Wi-Fi | 3.1 | Tested on the Quadra 605 |
+| [Sonora](patches/sonora/README.md) | `--sonora ENABLER` | Runs A/UX on the LC III and LC III+ | 3.1 | LC III, LC III+, Performa 450/460/466/467 with an FPU; tested on an LC III at 33 MHz |
+| [DaynaPORT](patches/daynaport/README.md) | `--daynaport` | Networking over a BlueSCSI's or ZuluSCSI's Wi-Fi | 3.1 | Tested on the Quadra 605 and LC III |
 | [Date](patches/date/README.md) | `--date` | `date` works with years after 1999 | 3.1 | Any |
 
 ## What you need
@@ -20,7 +21,8 @@ Apple software is included.
 ## Make the disk
 
 1. Install [Homebrew](https://brew.sh) by pasting the command from its home page into
-   Terminal (Applications → Utilities). For MEMCjr, also run `brew install hfsutils unar`.
+   Terminal (Applications → Utilities). For MEMCjr or Sonora, also run
+   `brew install hfsutils unar`.
 2. Download this project (on GitHub: **Code → Download ZIP**) and unzip it.
 3. In Terminal, type `cd `, drag the project folder onto the window and press Return. Then
    run `make-disk.sh` with the A/UX image, a name for the new disk, and your patches:
@@ -29,7 +31,8 @@ Apple software is included.
            --memcjr ~/Downloads/System_Enabler_065_12-sea.bin --daynaport --date \
            --ip 192.168.1.50
 
-   `./make-disk.sh --help` lists every option.
+   For an LC III, use `--sonora ~/Downloads/System_Enabler_003_1.1.sea.bin` in place of
+   `--memcjr …`. `./make-disk.sh --help` lists every option.
 
 ## Start A/UX
 
@@ -67,5 +70,5 @@ operating system can lose data or leave a Mac unable to start; you use it at you
 so keep backups. The authors are not liable for any damage or
 loss arising from its use.
 
-This project isn't affiliated with or endorsed by Apple. A/UX, Macintosh and Quadra are
-trademarks of Apple Inc.; other names are trademarks of their owners.
+This project isn't affiliated with or endorsed by Apple. A/UX, Macintosh, Performa and
+Quadra are trademarks of Apple Inc.; other names are trademarks of their owners.

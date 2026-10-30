@@ -4,6 +4,10 @@
 -- (Gestalt 95) instead of MAME's 25MHz one ($2225, Gestalt 94). CPUID=2221 / 2222 make it
 -- an LC/Performa 475 at 25 / 33MHz (Gestalt 89 / 90) with a full 68040, which MAME's own
 -- maclc475 (a 68LC040) can't be.
+-- On maclc3 / maclc3p (LC III / LC III+) it first loads tools/mame-lc3.lua (ROM CPU test fix,
+-- FPU on).
+local here = debug.getinfo(1, "S").source:match("^@(.*/)") or ""
+if manager.machine.system.name:match("^maclc3") then dofile(here .. "mame-lc3.lua") end
 if os.getenv("CPUID") then
   local id = 0xa55a0000 | tonumber(os.getenv("CPUID"), 16)
   cpuid_tap = manager.machine.devices[":maincpu"].spaces["program"]:install_read_tap(

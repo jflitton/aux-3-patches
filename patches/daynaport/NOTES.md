@@ -115,6 +115,10 @@ every `/etc/hosts` lookup wait out the timeouts first. `nslookup` is
 - 53C96 data in (`c94_in`): multiples of 256 bytes are read blind, the rest polled. A READ
   that ends early (any DaynaPORT poll) would leave the blind loop waiting, so the adapter's
   target gets `scsichar(id, SDC_RDPOLL, SDC_RDPOLL)`: `c94_vio` then uses `c94_pollin`.
+- 5380 data in (the LC III with the Sonora patch; the SE/30 and II family): `scsichar`
+  reaches `c80_char`, which keeps the flag in `tasks[]` unused. `scsi_in` wraps its
+  pseudo-DMA in `setjmp`, so a READ that ends early stops the transfer with a bus error and
+  `scsi_vio` takes the count it got. Works on an LC III (2026-10-29).
 - `scsichar` and `scsireq` take `(bus << 8) | target`, the bus being the `scsitab` index
   (1 for the 605's only bus) and checked against `curscsi` (`knowndriver`); bus 0 means
   the bus a search found the target on (`searchtab`).

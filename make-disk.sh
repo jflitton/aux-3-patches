@@ -16,6 +16,12 @@ Patches (choose one or more):
                        LC 475 and Performa 475/476). ENABLER is System
                        Enabler 065 as you downloaded it,
                        e.g. System_Enabler_065_12-sea.bin
+  --sonora ENABLER     Sonora support, for the LC III and LC III+ (and the
+                       Performa 450/460/466/467), with an FPU. ENABLER is
+                       System Enabler 003 version 1.1 as you downloaded it,
+                       e.g. System_Enabler_003_1.1.sea.bin
+                       (--memcjr and --sonora are for different Macs: one disk
+                       takes one of them)
   --daynaport          DaynaPORT networking, for a BlueSCSI or ZuluSCSI with Wi-Fi
   --date               the date command, fixed for years after 1999
 
@@ -32,6 +38,10 @@ Example, a Quadra 605 disk with every patch:
   ./make-disk.sh ~/Downloads/AUX_3_1_1GB_Use_In_Shoebill.zip ~/Desktop/HD0_AUX.hda \
       --memcjr ~/Downloads/System_Enabler_065_12-sea.bin --daynaport --date \
       --ip 192.168.1.50
+
+An LC III disk:
+  ./make-disk.sh ~/Downloads/AUX_3_1_1GB_Use_In_Shoebill.zip ~/Desktop/HD0_AUX.hda \
+      --sonora ~/Downloads/System_Enabler_003_1.1.sea.bin --date
 EOF
 }
 
@@ -47,13 +57,15 @@ die() { say "" "$*" >&2; exit 1; }
 #                 can't go on it
 #   apply_NAME    patches the new disk ($out) in place; its output goes to the log
 # PATCHES lists them in the order they are applied.
-PATCHES="memcjr date daynaport"
+PATCHES="memcjr sonora date daynaport"
 
-# the A/UX 3.1 kernel: the MEMCjr kernel patch matches the core of every 3.1 kernel
-# (whatever it is configured for, and whether it has the patch already) and no other
-is_aux31() {
-	python3 -I tools/binpatch.py patches/memcjr/bin/kernel-605.txt "$src" "$root" > /dev/null 2>&1
-}
+# kernel_ok SPEC: the kernel patch SPEC applies to the disk's kernel, or is on it already
+kernel_ok() { python3 -I tools/binpatch.py "$1" "$src" "$root" > /dev/null 2>&1; }
+MEMCJR_KERNEL=patches/memcjr/bin/kernel-605.txt
+SONORA_KERNEL=patches/sonora/bin/kernel-sonora.txt
+# the A/UX 3.1 kernel: each kernel patch matches the core of every 3.1 kernel (whatever it
+# is configured for, and whether it has that patch already) and no other
+is_aux31() { kernel_ok $MEMCJR_KERNEL || kernel_ok $SONORA_KERNEL; }
 
 NEEDS_memcjr="hmount:hfsutils unar:unar"
 title_memcjr() { say "MEMCjr support (Quadra 605; LC/Performa 475 untested)"; }
@@ -63,8 +75,23 @@ check_memcjr() {
 		die "$(basename "$enabler") doesn't look like System Enabler 065. Use the file as you
 downloaded it (for example System_Enabler_065_12-sea.bin)."
 	is_aux31 || die "$name isn't an A/UX 3.1 disk: its kernel is different."
+	kernel_ok $MEMCJR_KERNEL ||
+		die "$name has the Sonora (LC III) patch already. Start from an unpatched disk."
 }
 apply_memcjr() { run sh patches/memcjr/apply.sh "$out" "$enabler"; }
+
+NEEDS_sonora="hmount:hfsutils unar:unar"
+title_sonora() { say "Sonora support (LC III, LC III+)"; }
+check_sonora() {
+	[ -f "$enabler" ] || die "Can't find System Enabler 003: $enabler"
+	lsar "$enabler" 2>/dev/null | grep -q 003 ||
+		die "$(basename "$enabler") doesn't look like System Enabler 003. Use the file as you
+downloaded it (for example System_Enabler_003_1.1.sea.bin)."
+	is_aux31 || die "$name isn't an A/UX 3.1 disk: its kernel is different."
+	kernel_ok $SONORA_KERNEL ||
+		die "$name has the MEMCjr (Quadra 605) patch already. Start from an unpatched disk."
+}
+apply_sonora() { run sh patches/sonora/apply.sh "$out" "$enabler"; }
 
 NEEDS_date=
 title_date() { say "the year 2000 fix for date"; }
@@ -104,6 +131,10 @@ while [ $# -gt 0 ]; do
 		[ $# -ge 2 ] || die "--memcjr needs System Enabler 065, e.g.
 --memcjr ~/Downloads/System_Enabler_065_12-sea.bin"
 		choose memcjr; enabler=$2; shift 2; continue ;;
+	--sonora)
+		[ $# -ge 2 ] || die "--sonora needs System Enabler 003, e.g.
+--sonora ~/Downloads/System_Enabler_003_1.1.sea.bin"
+		choose sonora; enabler=$2; shift 2; continue ;;
 	--daynaport)
 		choose daynaport; shift; continue ;;
 	--date)
@@ -122,8 +153,11 @@ while [ $# -gt 0 ]; do
 	shift
 done
 if [ $n -lt 2 ]; then usage; exit 1; fi
-[ -n "$chosen" ] || die "Choose at least one patch: --memcjr ENABLER, --daynaport or --date.
-(./make-disk.sh --help lists them.)"
+[ -n "$chosen" ] || die "Choose at least one patch: --memcjr ENABLER, --sonora ENABLER,
+--daynaport or --date. (./make-disk.sh --help lists them.)"
+if want memcjr && want sonora; then
+	die "--memcjr and --sonora are for different Macs (Quadra 605, LC III): choose one."
+fi
 
 isaddr() {
 	say "$1" | grep -Eq '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$' &&

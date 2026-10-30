@@ -3,8 +3,8 @@
 This is for changing a patch, adding one, rebuilding the `bin/` files, or testing in
 emulators. To just make a disk, follow the [README](../README.md).
 
-Technical notes: [findings.md](findings.md) (how A/UX boots, and how the MEMCjr support
-came together) and [patches/daynaport/NOTES.md](../patches/daynaport/NOTES.md) (the
+Technical notes: [findings.md](findings.md) (how A/UX boots, and how the MEMCjr and Sonora
+support came together) and [patches/daynaport/NOTES.md](../patches/daynaport/NOTES.md) (the
 network driver, and linking it into `/unix`).
 
 ## Layout
@@ -30,6 +30,7 @@ Each patch folder holds:
 | Patch | Option | Applied by `apply.sh` |
 |---|---|---|
 | `memcjr` | `--memcjr ENABLER` | System Enabler 065 into the Mac OS System Folder (on a `dd` copy of the HFS partition, as hfsutils rewrites whatever it mounts); `bin/kernel-605.txt` on `/unix` and on `/etc/config.d/newunix`, which autoconfig links new kernels from; `src/toolbox-605.txt` |
+| `sonora` | `--sonora ENABLER` | System Enabler 003 into the Mac OS System Folder (as for `memcjr`); `bin/kernel-sonora.txt` on `/unix` and `/etc/config.d/newunix`; `src/toolbox-sonora.txt`; `src/snd-sonora.txt` on `/unix` and `/etc/boot.d/snd` |
 | `date` | `--date` | `src/date-y2k.txt` on `/bin/date` |
 | `daynaport` | `--daynaport` | `bin/dayna` linked into `/unix` by `tools/linkmod.py` as autoconfig would, and in `/etc/boot.d` with `src/master` for autoconfig's own relinks; `src/startup`, `src/dpsetup`; given an IP address, `/etc/NETADDRS` and `/etc/resolv.conf` |
 
@@ -46,9 +47,10 @@ only to the files it was written for. `tools/binpatch.py` only verifies unless g
 ## Building `bin/`
 
 The `bin/` files are built against the A/UX 3.1 `/unix` from `AUX_3_1_1GB.dsk`. The
-MEMCjr kernel patch only touches the core kernel, which is the same in every A/UX 3.1
-configuration, so it applies to any 3.1 `/unix`. The builds are reproducible. After
-changing a `src/`:
+MEMCjr and Sonora kernel patches only touch the core kernel, which is the same in every
+A/UX 3.1 configuration, so they apply to any 3.1 `/unix`. The two are for different Macs
+and change some of the same places, so a disk takes one of them (`make-disk.sh` refuses
+both). The builds are reproducible. After changing a `src/`:
 
     tools/build-patches.sh AUX_3_1_1GB.dsk            # rebuild every bin/
     tools/build-patches.sh AUX_3_1_1GB.dsk --check    # are they current?
@@ -101,11 +103,13 @@ The tools run on the system `python3` (3.9 or later) with only the standard libr
 | `tools/macbin.py` | Wrap a macOS file with resource fork as MacBinary II (for `hcopy -m`) |
 | `tools/coff.py`, `tools/auxdis.py` | A/UX COFF reader; symbol-annotated 68040 disassembler |
 | `tools/ksyms-ld.py` | Kernel COFF symbols as a GNU ld script |
+| `tools/kpatch.py` | What the kernel patch generators share: finding patch sites in a kernel, writing them as a binpatch spec |
 | `tools/mame-605-probe.lua` | MAME autoboot script: tracing, plus the older in-RAM kernel patches (see header) |
 | `tools/cuda-mame-patch.py`, `tools/prodinfo-copy.py` | Inputs for the probe's in-RAM patch modes (superseded by the real patch) |
 | `tools/probe-log.py` | Render a probe log: console text, exec/exit, panic strings |
 | `tools/mame-snap.lua`, `tools/qemu-shots.py` | Periodic screenshots from MAME / QEMU q800 |
 | `tools/mame-ckpt-test.lua` | Hold a checkpoint key (1-9, 0, Q-P) into a checkpoint kernel (`CKPT=1` build) and log restarts |
+| `tools/mame-lc3.lua` | What MAME's LC III needs, loaded by `mame-snap.lua` and `mame-ckpt-test.lua` on `maclc3` / `maclc3p`: a fix for its ROM's CPU test, and the FPU switched on |
 
 ## Testing in MAME
 
@@ -125,12 +129,27 @@ For a console log, run the probe instead: `OUT=log STOP=200 PATCHED=1 EXECLOG=1 
 ENABLER` puts in a checkpoint kernel (see `patches/memcjr/src/boot605.S`) for finding hangs
 on real hardware without a console.
 
+MAME's `maclc3` and `maclc3p` are an LC III at 25 MHz and an LC III+ at 33 MHz (ROM sets
+`maclc3` and `egret`). `mame-snap.lua` and `mame-ckpt-test.lua` load `tools/mame-lc3.lua`
+on them: MAME 0.289's 68030 keeps CACR bit 15, an 040 bit, so the LC III ROM takes it for
+an 040 and stops in its Test Manager (black screen), and MAME leaves these Macs' FPU off.
+With a fresh PRAM Mac OS runs in 24-bit mode and uses 8 MB; A/UX sizes all of `-ram`.
+For sound, `-wavwrite FILE` records MAME's output.
+
+    mame maclc3 -ram 32M -hard CLONE.hd -autoboot_script tools/mame-snap.lua \
+      -snapshot_directory DIR -video none -sound none -nothrottle -seconds_to_run 170
+
+`CKPT=1 patches/sonora/apply.sh CLONE.hd ENABLER` puts in the Sonora checkpoint kernel
+(see `patches/sonora/src/sonora.S`); `KEY=3 OUT=log STOP=150 mame maclc3 ... -debug
+-debugger none -autoboot_script tools/mame-ckpt-test.lua` holds key 3 into it.
+
 ## By hand
 
 The `apply.sh` scripts work on any copy:
 
     cp -c AUX_3_1_1GB.dsk CLONE.hd
     patches/memcjr/apply.sh CLONE.hd System_Enabler_065_12-sea.bin
+    # or, for an LC III: patches/sonora/apply.sh CLONE.hd System_Enabler_003_1.1.sea.bin
     patches/date/apply.sh CLONE.hd
     patches/daynaport/apply.sh CLONE.hd 192.168.1.50
     python3 -I tools/ufsput.py CLONE.hd 5 check

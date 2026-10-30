@@ -1,6 +1,6 @@
 # DaynaPORT
 
-`--daynaport` · A/UX 3.1 · Tested on the Quadra 605
+`--daynaport` · A/UX 3.1 · Tested on the Quadra 605 and LC III
 
 A driver for the DaynaPORT SCSI network adapter, which a BlueSCSI or ZuluSCSI with Wi-Fi
 emulates.
@@ -39,12 +39,13 @@ In CommandShell:
 
 | | Tested | Not tested yet |
 |---|---|---|
-| **Mac** | Quadra 605 | Other Macs that A/UX supports |
+| **Mac** | Quadra 605, LC III (with `--sonora`) | Other Macs that A/UX supports |
 | **Adapter** | BlueSCSI or ZuluSCSI with Wi-Fi | Other DaynaPORT emulators, a real DaynaPORT |
 | **A/UX disk** | `AUX_3_1_1GB_Use_In_Shoebill.zip` | Other A/UX 3.1 disks |
 
-Quadras and Centrises use the same SCSI chip as the 605, so they're the likeliest to work;
-the SE/30 and II family use a different one. No AppleTalk over Wi-Fi.
+It has worked with both of A/UX's SCSI drivers: the 605's 53C96 (the Quadras' and
+Centrises' chip) and the LC III's 5380 (the SE/30's and II family's). No AppleTalk over
+Wi-Fi.
 
 ## Troubleshooting
 

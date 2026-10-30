@@ -1,0 +1,20 @@
+; A/UX sound driver change for the LC III and LC III+ (both sound FIFOs).
+; Apply with tools/binpatch.py. Written against A/UX 3.1 (AWS 95) /etc/boot.d/snd, and
+; /unix as autoconfig links it from that module.
+
+; The kernel patch gives these Macs the Quadras' sound path (devices[0] = 2, see
+; src/sonora.S), whose sample loop in sndintr writes each sample to FIFO B ($400) only:
+;   cmpi.b #2,devices; beq.b <skip A>; btst #2,asc_state+3; bne.b <skip A>;
+;   move.b d0,([sound_addr]); move.b sample,([sound_addr],$400)
+; Sonora plays FIFO A and FIFO B as the two channels, and the LC III's speaker plays A:
+; the ROM's startup chime writes every sample to both (ROM+$45F28), and A/UX's sound came
+; out of FIFO B's channel only in MAME, and not at all from a real LC III. Drop the beq, so
+; the sample goes to FIFO A as well, as on the other non-Quadra Macs, unless sound input is
+; recording (asc_state bit 2), which the next test still skips; with this, a real LC III
+; plays sound. A Quadra would now write FIFO A too, but a disk with this patch is only for
+; the LC III and LC III+.
+; The beq is PC-relative, so the module (a relocatable object) takes the same bytes.
+file /unix /etc/boot.d/snd
+at sndintr+0x352           ; was: beq.b sndintr+0x366 (skip FIFO A on the Quadra path)
+check 1be44bfbdb201e48
+new 4e 71                  ; nop

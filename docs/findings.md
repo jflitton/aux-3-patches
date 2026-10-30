@@ -1,4 +1,4 @@
-# A/UX on the Quadra 605: findings (2026-10-28)
+# A/UX on the Quadra 605 and LC III: findings (2026-10-28)
 
 *Developer notes. To make a disk, see the [README](../README.md); for working on the code,
 [development.md](development.md). This is a dated log, and files have moved since: the
@@ -611,11 +611,207 @@ same paths as 0x5c/0x5d.
 s at $2221), as do $2225, $2226 and QEMU q800. Read back at t=150: machineID 0x57 / 0x58,
 cpuspeed 25 / 33, devices[1] = 1 (0x5c / 0x5d, 25 / 33 for the 605). No real 475 has run it.
 
+### 2026-10-29: the LC III and LC III+ (Sonora), in MAME
+Jeff's LC III: 25MHz board overclocked to 33MHz, 68882 fitted. Target: the LC III and
+LC III+ at either clock, and their Performa twins (patch `patches/sonora/`, `--sonora`;
+mutually exclusive with MEMCjr, free to break other Macs).
+
+**Identity.** Gestalt 27 = LC III / Performa 450 (machineID 0x19), Gestalt 62 = LC III+ /
+Performa 460/466/467 (0x3C; Linux `MAC_MODEL_P460`). The ROM ($067C, `ecbbc41c`) picks by
+the CPU ID register (MAME: $A55A0001 / $A55A0003). (Assumed here that an overclocked LC III
+stays 27; wrong, see below: Jeff's reports 62.) `boardinit`'s switch table (decoded): 0x19
+falls on the panic case, 0x3C is past the table's end; both panic "unsupported motherboard
+type" (confirmed in MAME). System
+Enabler 003 v1.1 is needed for Mac OS 7.1; v1.0 lacks the LC III+'s ID. The LC 520, 550,
+Color Classic II and Macintosh TV are Sonora/Ardbeg with Cuda instead of Egret: not covered.
+
+**Hardware vs A/UX.** Linux `config.c` gives the LC III the IIvx's ADB (Egret), VIA (RBV
+style), SCSI (`MAC_SCSI_LC`), SCC and floppy types; only expansion differs (PDS vs NuBus).
+A/UX has an unsupported IIvx/IIvi/Performa 600 case (machineID 0x2a/0x2b/0x2e): `devices[1]`
+= 1 (Egret), `devices[0]` = 3, `via2_addr` $50026000, `rbv_exists`, `obv_monitor` = 1 (video
+with its own VRAM, not RBV's), cpuspeed 32. MAME's Sonora (`sonora.cpp`, `maclc3.cpp`): VIA1,
+ASC, SWIM 2, pseudo-VIA and the SCC/SCSI decoded with A20-A23 ignored, so the Mac II
+addresses A/UX uses ($500xxxxx) reach the same devices as the ROM's $50F0xxxx; VRAM at
+$60000000; RAM one contiguous bank from 0; interrupts at levels 1 (VIA1), 2 (pseudo-VIA:
+SCSI, ASC, VBL, PDS) and 4 (SCC).
+
+Every other kernel `machineID` reader compares with single machines or with "above the
+IIci/IIsi" (`doboot`, `setup_autovectors`, `enable_caches`), so 0x19 and 0x3C take the
+IIvx's paths everywhere; switch-style readers (`setup_rbv`, `setup_040`, `parityinit`,
+`dopowerdown`, `doPatches`) are equality tests too. Remapping only boardinit's switch value
+to 0x2e (in RAM) took MAME's LC III through the whole kernel (SCSI disk and CD, SWIM, SCC,
+Egret clock, slot 0 video) to the Toolbox's System 7.0.1 model check, the 605's last gate.
+
+Checked and not needed:
+- Pseudo-VIA IFR clear: Linux clears with bit 7 off on the LC III only (`rbv_clear`). A/UX
+  writes $88 (SCSI) and $90 (ASC) to VIA2+$1A03; the LC III ROM's own handlers write
+  exactly the same (ROM+$A05A, $A0DA, via VIA2 base $CEC). MAME (hardware-tested pseudo-VIA)
+  clears on either.
+- ProductInfo/VideoInfo: slot 0 found its display sResource unaided (unlike the 605's
+  $51900000 VRAMLogAddr32).
+- Console `initDFAC - unexpected machine type: 25`: `initHardware` names only the IIsi
+  (0x10) and `devices[0]` = 2 (Quadras), but falls through to the same `setDFACByte` after
+  the printf. Cosmetic.
+
+**The patch** (`src/sonora.S`, 386 bytes over `orwellsize` + `memcdjsize` in pstart, up to
+`_DAFBMonitorDetect`: Orwell/djMEMC RAM sizing, never called here; pstart is
+identity-mapped, so no physical/virtual split):
+1. `boardinit+0x14` → `sonora_switch`: 0x19/0x3C → 0x2e at the switch only.
+2. `memsize+0x9c` (`tst.l rbv_exists`) → `jsr sonora_rbv`: Z set on Sonora, so memsize
+   takes the one-bank path instead of the RBV one (bank A from 0 and bank B at $04000000,
+   IIci layout, both unbounded probes).
+3. `memsize+0xae` → `sonora_banksize`: the MEMCjr patch's bounded probe (Mac OS BufPtr
+   rounded up to 1MB, bus error catch).
+4. `vadrspace`'s `jsr setup_autovectors` → `sonora_vectors`: levels 3/5/6 → `nointr`, as on
+   the 605 (no on-board source; Jeff's board is overclocked too).
+5. `aEgretDispatch+2` → `sonora_egret`: return pbResult. The LC III ROM's XPRAM routine
+   (ROM+$B37D6: type 1, cmd 2/8, `_EgretDispatch`, `lea $14(a7),a7; rts`) is the 605's
+   ROM+$B37EC; d0 = 1 meant "failed" to ROM code in the kernel. No visible change in MAME
+   (the A/UX desktop is 1-bit either way: the Toolbox's own setting).
+cpuspeed stays the IIvx's 32: it only sizes SCSI timeouts, and suits 25 and 33MHz alike.
+`CKPT=1` adds the checkpoint machinery (602 bytes): `_start`'s `jsr boardinit` →
+`sonora_board`; keys 1-9, 0 = entry, boardinit, RAM sized, MMU on, then the init_first /
+startup / initfunc trampolines as on the 605. In MAME: key 3 restarts at 3 and the Mac boots
+again, key 0 at 10 (next boot fscks), no key boots to the Finder.
+
+**Toolbox** (`src/toolbox-sonora.txt`): BoxFlag 0x15 (LC III) and 0x38 (LC III+) become
+0x0C (IIsi), not 0x10: later Toolbox readers are `doVariables` (≥ 0x0C), the TimeDBRA set-up
+(≤ 0x14 is all the same) and `cSysBeep` (0x10 takes `quadraSimpleBeep`, which only loads
+`'snd '` 1 from another file; 0x0C the generic `cSndPlay`; that difference turned out to
+matter, see v4), and 0x10 would tell System 7.0.1
+it is on an 040 Quadra. The 36-byte site can't hold a second store, so the shared exit at
+`GetLowFromKernel+0xa` becomes `move.b d1,BoxFlag` and the dispatch sets d1 = 0x10 before
+the table, 0x0C before the LC III branches. Unicorn (68040), all 256 BoxFlags, original vs
+patched 3.1 `Patch.067C`: only 0x15 and 0x38 change (to 0x0C); `realBoxFlag` and the stack
+match. Also verifies on 3.0.1's `Patch.067C`.
+
+**MAME 0.289 and the LC III.** `maclc3` (and `maclc3p`, `maclc520`) stop in the ROM's
+Test Manager with a black screen: the ROM's CPU test (ROM+$47204) sets CACR bit 15 and
+reads back $A000 (bit 15 kept: an 040's IE bit), so it takes the 030 for an 040, executes
+`cinva` ($F498, "coprocessor 2 not present") and fails. `tools/mame-lc3.lua` turns that
+`beq` into `bra` (ROM+$47218) and takes $700 off the ROM checksum, in MAME's copy only; it
+also turns on the FPU setting (off by default; read at reset, so it resets two frames
+later). A/UX sized 8MB there (BufPtr $7E9428); blamed on MAME's ROM here, but it was Mac
+OS's 24-bit mode, see below.
+
+**Results (MAME, A/UX 3.1 Shoebill image + `make-disk.sh --sonora --date --daynaport`):**
+`maclc3` (25MHz, machineID 0x19) and `maclc3p` (33MHz, 0x3C) boot to the A/UX Finder. Not
+run on hardware.
+
+### 2026-10-29: first real LC III; RAM, sound (v2)
+**v1 on Jeff's LC III** (25MHz board at 33MHz, 68882, 36MB, BlueSCSI): A/UX 3.1 to the
+Finder. So real Sonora does answer at A/UX's $500xxxxx addresses. Console: `initDFAC -
+unexpected machine type: 60`, i.e. machineID 0x3C: the board reports Gestalt 62 (LC III+).
+Sonora makes the CPU clock, and its CPU ID follows the clock setting as MEMCjr's does; both
+IDs were covered. Problems: `total memory size: 8388608` of 36MB; init "respawning too
+rapidly" for `catsearchd`; no sound; DaynaPORT absent (the disk had no `--daynaport`).
+
+**RAM.** System 7.1 on these Macs starts in 24-bit mode (MMU32Bit $CB2 = 0 in MAME), where
+Mac OS uses 8MB and BufPtr sits below it, so `sonora_banksize`'s BufPtr limit stopped at
+8MB (MAME the same: $7E9428). PhysMemTop ($1EF8 in launch's copy at kstart) is the end of
+physical RAM in either mode (MAME 32MB: $2000000). The limit is now the larger of the two.
+MAME: 32MB with 24-bit mode. (MEMCjr's `b605_banksize` has the same BufPtr-only limit: a
+605 in 24-bit mode would get 8MB. Not changed.)
+
+**catsearchd** (`csd:2:respawn:/etc/catsearchd`) `check_minmem`: `uvar` v_maxpmem (pages,
+struct var +$C4) × 4KB against `minmem` = 16MB (`-m N[k|m|p]` sets it), else "insufficient
+memory available" and exit 1. Stock behaviour on any A/UX Mac with less than 16MB;
+reproduced in MAME at 8MB (11 exits), gone at 32MB.
+
+**Sound.** Test: an inittab `once` line running `dd if=/unix of=/dev/snd/raw bs=8k count=40`,
+MAME `-wavwrite`. v1: `dd` never returns, no samples written to the ASC. With `devices[0]` =
+3 (the IIvx's, classic ASC) `ASCIntr` runs with $804 = $0E and refills only on bit 0 (FIFO
+A half empty). MAME's Sonora ASC (checked with ASCTester on real hardware): FIFO A reads
+empty in playback, half empty is bit 2, FIFO IRQ enables at $F09/$F29 (0 = on; reset 0;
+Mac OS never wrote them after the chime). `devices[0]` = 2 (the Quadras' IOSB/EASC path:
+`sndinit` programs the $F00 block, `ASCIntr` refills on bit 2 and toggles $F09/$F29):
+`dd` completes, all 327,680 bytes go to the FIFO, but still silent. The DFAC is in the LC
+III's output path (MAME `dfac.cpp`: ASC PWM → LPF, bit 1 → amplifier → attenuator, bits 7-5),
+and A/UX's `initHardware` sends 0 then `setAGC`'s $08 through Egret (pseudo-command $0E,
+byte bit-reversed by `reverse_bits`): volume -inf, LPF off. Mac OS's value: $6A (volume 3
+= SdVolume $260, bit 1, AGC bits). Forcing $E2 into it in RAM: the noise plays.
+Fix in the patch: `_start`'s `jsr boardinit` → `sonora_board` (devices[0] = 2 after the
+IIvx case; works out the DFAC bits from SdVolume), and `cEgretDispatch`'s first instruction
+(`link.l a6,#-12`) → `jmp sonora_cegret`, which puts bit 1 and SdVolume's bits into every
+DFAC request ($0E, data byte bit-reversed: bits 6 and 2-0) before the link. `setDFACByte` is
+in the `snd` boot.d module, which autoconfig relinks, so the filter sits in the core.
+MAME, real patch: DFAC $6A under A/UX as under Mac OS, `dd` done, noise at -9dB; no
+`initDFAC` message any more (`initHardware` takes the Quadra branch). 494 bytes (checkpoint
+build 702).
+
+**DaynaPORT on the 5380.** `scsireq`/`scsichar` dispatch through `scsitab` to the 5380
+driver (`c80_*`); `c80_char` keeps the flags in `tasks[]` but nothing reads SDC_RDPOLL.
+`scsi_vio` loops on what `scsi_in` returns, and `scsi_in` wraps its pseudo-DMA in `setjmp`
+(a target that stops early ends the transfer with a bus error), so short reads look
+handled. Untested; MAME has no DaynaPORT.
+
+**v2** on Jeff's SD card as `HD0_aux31-lc3-v2.hda` (`--sonora --date --daynaport --ip
+192.168.1.51`; v1 kept as `_HD0_aux31-lc3-v1.hda`). MAME `maclc3p`: Finder, 32MB, DaynaPORT
+driver loads ("no DaynaPORT found"), catsearchd stays up.
+
+### 2026-10-29: v2 on the real LC III; sound to both FIFOs (v3)
+**v2 on Jeff's LC III:** all 36MB (so on-board RAM and SIMM are one contiguous bank),
+DaynaPORT works over the 5380, video 640×480 at thousands of colours with 768KB VRAM and
+256 with 512KB (Apple's figures). Sound: none; the Sound control panel flashes the menu bar
+(`cSysBeep`'s flashBar: volume 0, no 'snd ' resource, or `cSndPlay` failing) with the slider
+above 0. `dd if=/unix of=/dev/snd/raw bs=8k count=8` returns at once (64KB fits the driver's
+buffer) with no sound, so the kernel path is silent too.
+
+**Testing the Toolbox in MAME.** Driving the Finder by keyboard (`natkeyboard` for letters,
+fields for Command and arrows; `manager.machine.time.seconds` is whole seconds, use
+`time:as_double()`) opens the Sound control panel, but arrowing through it plays nothing,
+and a failed Find gives a dialog, not a beep. What works: a breakpoint at `cGetOSEvent`
+(0x6A38 in `Patch.067C`, keyed on its own bytes, since other processes run code at the same
+address and the u-area can't be read from user mode) that pushes the return address and
+jumps to `cSysBeep` (0xABCC), armed from Lua with an arrow key to wake the Finder. Each
+beep goes `cSysBeep` → `setSndVol` → `cSndPlay` → `cSndNewChannel` → `cSendToKernel` →
+`writeToKernel` → kernel → ASC, with no system call errors.
+
+**Cause.** MAME's `-wavwrite` has three channels; the ROM's chime is on the first two,
+A/UX's sound only on the second. On the Quadra path (`devices[0]` = 2) `sndintr` writes
+each sample to FIFO B only (`cmpi.b #2,devices; beq` past the FIFO A write, sndintr+0x352);
+the classic path and the LC III ROM's chime (ROM+$45F28: `move.b d0,(a6); move.b
+d0,$400(a6)`) write both. Sonora plays A and B as the two channels and the LC III's speaker
+takes A. Fix (`src/snd-sonora.txt`): that `beq` becomes a `nop`, in `/unix` and in
+`/etc/boot.d/snd` (a relocatable COFF object; the `beq.b` is PC-relative, so the same two
+bytes) so an autoconfig relink keeps it. FIFO A is still skipped while sound input records
+(asc_state bit 2). MAME: the injected beeps on both channels. **v3** on Jeff's SD card as
+`HD0_aux31-lc3-v3.hda` (v2 kept as `_HD0_aux31-lc3-v2.hda`).
+
+The LC III ROM programs Sonora like an EASC for the chime (version $Bx: $F09/$F29 = 1,
+$80A = 2, FIFO clear, $806 = $E0, mode 1, rate $812F and CD-XA coefficients in both $F00
+blocks, channel volumes $7F, $F08/$F28 = $80), close to what `sndinit`'s Quadra branch writes.
+
+### 2026-10-29: v3 on the real LC III; Simple Beep (v4)
+**v3 on Jeff's LC III:** sound plays, every alert sound but Simple Beep, and A/UX's volume
+slider works live: real Sonora applies ASC $806 (A/UX's `sndioctl` volume write), which
+MAME's Sonora ignores.
+
+**Simple Beep** is `'snd '` 1, a square wave (the other alert sounds are sampled). On the
+Quadra path the kernel has no wavetable synthesizer: `sndopen` sends `/dev/snd/note` and
+`/dev/snd/wave*` to EIO when `devices[0]` = 2 (sndopen+0x37e). `cSysBeep`, for alert ID 1,
+dispatches on BoxFlag: the Quadras (0x0E, 0x10, 0x14, 0x18, 0x1D, 0x1E, 0x2E, 0x2F, 0x35) go
+to `quadraSimpleBeep`, which plays `'snd '` 1 from `/mac/lib/Resources/sampledBeep`; the
+LC III's 0x0C is below the table and got the square wave → `cSndPlay` fails → flashBar
+(MAME, forcing the alert ID read at cSysBeep+0x40 to 1: reproduced). Fix
+(`src/toolbox-sonora.txt`): the table's out-of-range `bhi.w` (cSysBeep+0x78) goes to the
+`quadraSimpleBeep` call instead of the square wave. MAME: the sampled beep on both
+channels. **v4** on Jeff's SD card as `HD0_aux31-lc3-v4.hda` (v3 kept as
+`_HD0_aux31-lc3-v3.hda`).
+
+**v4 on Jeff's LC III:** every sound plays, Simple Beep included, also when clicked in the
+Sound control panel (expected silent there, as the panel was taken to play the System's
+square wave itself; it evidently goes through `SysBeep`). Shutdown and restart work.
+
 ## Open items
+- LC III: a 25MHz board (Gestalt 27) and the Performas on real hardware; sound input, the
+  floppy drive and the serial ports (found by the kernel, not exercised). The DFAC volume
+  is set once from Mac OS's SdVolume while A/UX's control drives ASC $806, so a low Mac OS
+  volume at startup also lowers A/UX's loudest setting.
 - Real 605 (33MHz): A/UX 3.1 boots to the Finder with correct video at every depth (v7).
-  A/UX's `_EgretDispatch` returning 1 for success is fixed on the 605 only; other Egret
-  machines have the same convention, not touched.
-- The patch is for the Quadra 605, and in theory the LC/Performa 475 (MAME only, see
+  A/UX's `_EgretDispatch` returning 1 for success is fixed on the 605 and (Sonora patch)
+  the LC III / III+ only; other Egret machines have the same convention, not touched.
+- The MEMCjr patch is for the Quadra 605, and in theory the LC/Performa 475 (MAME only, see
   above); A/UX's Egret machines (IIsi, IIvi, IIvx, Performa 600, Q900, Q950) must use
   unpatched media (the kernel guard only keeps it harmless there).
 - A real 475 (with a full 68040): first run, ideally with the checkpoint kernel at hand.

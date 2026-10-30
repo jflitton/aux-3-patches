@@ -1,0 +1,58 @@
+; A/UX Toolbox (user-mode Mac environment) changes for the LC III and LC III+.
+; Apply with tools/binpatch.py. Written against A/UX 3.1 (AWS 95) /mac/lib/Patches.
+
+; GetLowFromKernel saves the kernel's BoxFlag in realBoxFlag (Gestalt 'mach' = it + 6) and
+; then rewrites BoxFlag to 0x10 (Quadra 700) for the machines System 7.0.1 predates
+; (0x18 C650, 0x1D Q800, 0x1E Q650, 0x2E C610, 0x2F Q610, 0x35), because the System's
+; 'boot' 2 resource refuses any BoxFlag above 0x14 with SysError(102), "This startup disk
+; will not work on this Macintosh model". Add the LC III, 0x15 (Gestalt 27, also the
+; Performa 450), and the LC III+, 0x38 (Gestalt 62, also the Performa 460, 466 and 467),
+; and give them 0x0C, the IIsi, an 030 Mac with Egret that 7.0.1 knows, where 0x10 would
+; claim an 040 Quadra. After this the Toolbox reads BoxFlag only in doVariables (anything
+; from 0x0C up), the TimeDBRA set-up (anything up to 0x14 is the same) and cSysBeep, for
+; Simple Beep (see the last change).
+
+; The exit the jump table takes for the Quadras: "move.b #$10,BoxFlag" becomes
+; "move.b d1,BoxFlag", with d1 set before the jump below.
+file /mac/lib/Patches/Patch.067C
+at GetLowFromKernel+0xa    ; was: move.b #$10,BoxFlag
+check c55ff6a4af315477
+new 13 c1 00 00 0c b3      ; move.b  d1,BoxFlag
+new 4e 71                  ; nop
+
+; The site runs from the redundant second load of BoxFlag into d0 to the jump table: the
+; old range check, its bhi, the table dispatch and the 4-byte swbeg header (illegal; dc.w
+; 30) that the jmp skips. d1 is a scratch register to C callers, and the only caller,
+; doVariables, goes straight on to call InitUniversalPtr and sets d1 itself before using
+; it. The range check is the old one with word operations (the table indexes with d0.w),
+; and the dispatch is the old one, moved up 4 bytes against the same table.
+at GetLowFromKernel+0x3a   ; was: move.b BoxFlag,d0; extb.l d0; subi.l #$18,d0; cmpi.l #$1d,d0;
+                           ;      bhi.b; add.w; move.w (table,pc,d0.w),d0; jmp (table,pc,d0.w);
+                           ;      swbeg
+check d7b574f7d84fd99b
+new 72 0c                  ; moveq   #$c,d1           d0 = BoxFlag already
+new 0c 40 00 15            ; cmpi.w  #$15,d0
+new 67 c8                  ; beq.b   GetLowFromKernel+0xa (BoxFlag = d1): LC III
+new 0c 40 00 38            ; cmpi.w  #$38,d0
+new 67 c2                  ; beq.b   GetLowFromKernel+0xa: LC III+
+new 72 10                  ; moveq   #$10,d1          for the Quadras in the table
+new 04 40 00 18            ; subi.w  #$18,d0
+new 0c 40 00 1d            ; cmpi.w  #$1d,d0
+new 62 be                  ; bhi.b   GetLowFromKernel+0x12 (leave BoxFlag)
+new d0 40                  ; add.w   d0,d0
+new 30 3b 00 06            ; move.w  (GetLowFromKernel+0x5e,pc,d0.w),d0
+new 4e fb 00 02            ; jmp     (GetLowFromKernel+0x5e,pc,d0.w)
+
+; Simple Beep. The Quadras' sound path, which the kernel patch gives these Macs, has no
+; wavetable synthesizer: sndopen fails /dev/snd/note and /dev/snd/wave* with EIO, so the
+; System's 'snd ' 1, a square wave, can't play. cSysBeep, for alert sound 1, sends the
+; Quadras' BoxFlags (0x0E, 0x10, 0x14, ...) to quadraSimpleBeep, which plays 'snd ' 1 from
+; /mac/lib/Resources/sampledBeep, a sampled copy; every other BoxFlag gets the square wave,
+; so on the LC III Simple Beep only flashed the menu bar. Send the BoxFlags outside
+; cSysBeep's table (BoxFlag - 0x0E above 0x27), the LC III's 0x0C among them, to
+; quadraSimpleBeep too. A disk with this patch is only for the LC III and LC III+, whose
+; BoxFlag is 0x0C here. On a real LC III, Simple Beep then plays as the alert sound and
+; when clicked in the Sound control panel.
+at cSysBeep+0x78           ; was: bhi.w cSysBeep+0xe6 (GetResource('snd ', 1), cSndPlay)
+check 7b41e795ba882de0
+new 62 00 00 60            ; bhi.w   cSysBeep+0xda (jsr quadraSimpleBeep)
