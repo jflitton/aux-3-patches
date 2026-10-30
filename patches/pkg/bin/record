@@ -1,0 +1,6 @@
+format 1
+name pkg
+version 0.2
+summary Installs, upgrades and removes packages
+url https://github.com/jflitton/aux-3-pkg
+built dafc331

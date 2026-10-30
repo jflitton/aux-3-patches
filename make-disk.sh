@@ -24,6 +24,8 @@ Patches (choose one or more):
                        takes one of them)
   --daynaport          DaynaPORT networking, for a BlueSCSI or ZuluSCSI with Wi-Fi
   --date               the date command, fixed for years after 1999
+  --pkg                the pkg package manager, which installs software from package
+                       files or over the network
 
 Each patch is described in patches/NAME/README.md.
 
@@ -36,7 +38,7 @@ Network settings for --daynaport (all optional; leave them out and run
 
 Example, a Quadra 605 disk with every patch:
   ./make-disk.sh ~/Downloads/AUX_3_1_1GB_Use_In_Shoebill.zip ~/Desktop/HD0_AUX.hda \
-      --memcjr ~/Downloads/System_Enabler_065_12-sea.bin --daynaport --date \
+      --memcjr ~/Downloads/System_Enabler_065_12-sea.bin --daynaport --date --pkg \
       --ip 192.168.1.50
 
 An LC III disk:
@@ -58,7 +60,7 @@ die() { say "" "$*" >&2; exit 1; }
 #                 can't go on it
 #   apply_NAME    patches the new disk ($out) in place; its output goes to the log
 # PATCHES lists them in the order they are applied.
-PATCHES="memcjr sonora date daynaport"
+PATCHES="memcjr sonora date daynaport pkg"
 
 # kernel_ok SPEC: the kernel patch SPEC applies to the disk's kernel, or is on it already
 kernel_ok() { python3 -I tools/binpatch.py "$1" "$src" "$root" > /dev/null 2>&1; }
@@ -119,6 +121,15 @@ apply_daynaport() {
 	run sh patches/daynaport/apply.sh "$out" "$@"
 }
 
+NEEDS_pkg="cmp:diffutils"
+title_pkg() { say "the pkg package manager"; }
+check_pkg() {
+	if python3 -I tools/ufs.py "$src" cat "$root" /usr/local/bin/pkg > /dev/null 2>&1; then
+		die "$name already has pkg."
+	fi
+}
+apply_pkg() { run sh patches/pkg/apply.sh "$out"; }
+
 # --- what was asked for ------------------------------------------------------------
 
 chosen= aux= out= enabler= ip= mask= gw= dns= n=0
@@ -140,6 +151,8 @@ while [ $# -gt 0 ]; do
 		choose daynaport; shift; continue ;;
 	--date)
 		choose date; shift; continue ;;
+	--pkg)
+		choose pkg; shift; continue ;;
 	--ip|--netmask|--gateway|--dns)
 		[ $# -ge 2 ] || die "$1 needs a value, e.g. $1 192.168.1.50"
 		case $1 in
@@ -155,7 +168,7 @@ while [ $# -gt 0 ]; do
 done
 if [ $n -lt 2 ]; then usage; exit 1; fi
 [ -n "$chosen" ] || die "Choose at least one patch: --memcjr ENABLER, --sonora ENABLER,
---daynaport or --date. (./make-disk.sh --help lists them.)"
+--daynaport, --date or --pkg. (./make-disk.sh --help lists them.)"
 if want memcjr && want sonora; then
 	die "--memcjr and --sonora are for different Macs (Quadra 605, LC III): choose one."
 fi

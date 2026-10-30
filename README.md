@@ -10,6 +10,7 @@ Apple software is included.
 | [Sonora](patches/sonora/README.md) | `--sonora ENABLER` | Runs A/UX on the LC III and LC III+ | 3.1 | LC III, LC III+, Performa 450/460/466/467 with an FPU; tested on an LC III at 33 MHz |
 | [DaynaPORT](patches/daynaport/README.md) | `--daynaport` | Networking over a BlueSCSI's or ZuluSCSI's Wi-Fi | 3.1 | Tested on the Quadra 605 and LC III |
 | [Date](patches/date/README.md) | `--date` | `date` works with years after 1999 | 3.1 | Any |
+| [pkg](patches/pkg/README.md) | `--pkg` | A package manager: installs software from package files or over the network | 3.1 | Any |
 
 ## Requirements
 
@@ -27,7 +28,7 @@ Apple software is included.
 A Quadra 605 disk with every patch, and an LC III disk:
 
     ./make-disk.sh AUX_3_1_1GB_Use_In_Shoebill.zip HD0_AUX.hda \
-        --memcjr System_Enabler_065_12-sea.bin --daynaport --date --ip 192.168.1.50
+        --memcjr System_Enabler_065_12-sea.bin --daynaport --date --pkg --ip 192.168.1.50
     ./make-disk.sh AUX_3_1_1GB_Use_In_Shoebill.zip HD0_AUX.hda \
         --sonora System_Enabler_003_1.1.sea.bin --date
 

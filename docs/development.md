@@ -33,6 +33,7 @@ Each patch folder holds:
 | `sonora` | `--sonora ENABLER` | System Enabler 003 into the Mac OS System Folder (as for `memcjr`); `bin/kernel-sonora.txt` on `/unix` and `/etc/config.d/newunix`; `src/toolbox-sonora.txt`; `src/snd-sonora.txt` on `/unix` and `/etc/boot.d/snd` |
 | `date` | `--date` | `src/date-y2k.txt` on `/bin/date` |
 | `daynaport` | `--daynaport` | `bin/dayna` linked into `/unix` by `tools/linkmod.py` as autoconfig would, and in `/etc/boot.d` with `src/master` for autoconfig's own relinks; `src/startup`, `src/dpsetup`; given an IP address, `/etc/NETADDRS` and `/etc/resolv.conf` |
+| `pkg` | `--pkg` | `bin/pkg` as `/usr/local/bin/pkg`; `bin/record`, completed with the file's size and checksum, as `/usr/local/lib/pkg/installed/pkg`, making the directories on the way; `/usr/local/bin` in root's PATH in `/.profile` and `/.login` |
 
 `make-disk.sh` applies them in that order and then checks the A/UX file system like fsck
 would (`tools/ufsput.py DISK PART check`). The kernel patch and the driver are
@@ -54,6 +55,15 @@ both). The builds are reproducible. After changing a `src/`:
 
     tools/build-patches.sh AUX_3_1_1GB.dsk            # rebuild every bin/
     tools/build-patches.sh AUX_3_1_1GB.dsk --check    # are they current?
+
+`patches/pkg/bin/` is the exception: pkg is developed in its own repository,
+[aux-3-pkg](https://github.com/jflitton/aux-3-pkg), and copied from there. Check out the
+release you want beside this repository and run
+
+    patches/pkg/update.sh ../aux-3-pkg
+
+which builds it there, copies it into `bin/`, and records its version and tag (or commit)
+in `bin/record`.
 
 ## Adding a patch
 
@@ -98,7 +108,7 @@ The tools run on the system `python3` (3.9 or later) with only the standard libr
 | `tools/binpatch.py` | Apply a patch spec to a file, or to files inside a disk image (clones only) |
 | `tools/linkmod.py` | Link a `boot.d` module into a configured `/unix` as autoconfig would; `check` proves it on Apple's own |
 | `tools/elf2coff.py` | Turn an `m68k-elf-ld -r` object into an A/UX COFF module; check it |
-| `tools/ufsput.py` | Write files (up to 16MB) into an A/UX UFS partition (clones only); check a partition like fsck |
+| `tools/ufsput.py` | Write files (up to 16MB) and make directories in an A/UX UFS partition (clones only); check a partition like fsck |
 | `tools/ufs.py` | Read-only A/UX UFS reader (partitions, find, ls with device numbers, cat, extract, where) |
 | `tools/macbin.py` | Wrap a Mac file, as `unar -k visible` extracts it, as MacBinary II (for `hcopy -m`) |
 | `tools/coff.py`, `tools/auxdis.py` | A/UX COFF reader; symbol-annotated 68040 disassembler |
@@ -152,4 +162,5 @@ The `apply.sh` scripts work on any copy:
     # or, for an LC III: patches/sonora/apply.sh CLONE.hd System_Enabler_003_1.1.sea.bin
     patches/date/apply.sh CLONE.hd
     patches/daynaport/apply.sh CLONE.hd 192.168.1.50
+    patches/pkg/apply.sh CLONE.hd
     python3 -I tools/ufsput.py CLONE.hd 5 check

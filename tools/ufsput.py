@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Add or replace files on an A/UX UFS partition (big-endian 4.2/4.3BSD FFS), and check
-its allocation metadata.
+"""Add or replace files and make directories on an A/UX UFS partition (big-endian
+4.2/4.3BSD FFS), and check its allocation metadata.
 
   ufsput.py IMAGE PART check
         fsck-style consistency check of PART: every inode's blocks against the free
@@ -11,6 +11,9 @@ its allocation metadata.
         A new file gets MODE (octal, default 644) and UID/GID (default 0 0), a replaced
         one keeps its own unless they are given. Direct and single indirect blocks only
         (12 + NINDIR blocks: 16MB with 8KB blocks), for SRC and for a replaced file.
+  ufsput.py IMAGE PART mkdir PATH [MODE [UID GID]] [--apply]
+        make the directory PATH (its parent must exist, PATH must not), as mkdir(2)
+        would: MODE default 755, UID/GID default 0 0.
 
 Without --apply nothing is written (throwaway clones only, as for binpatch.py). The
 allocator follows the 4.3BSD rules: full blocks are counted in cs_nbfree and the
@@ -168,7 +171,7 @@ class Writer(UFS):
         dino = self.lookup(dirpath)
         if not stat.S_ISDIR(dino['mode']):
             raise ValueError('%s is not a directory' % dirpath)
-        totals = dict(nbfree=0, nffree=0, nifree=0)
+        totals = dict(ndir=0, nbfree=0, nffree=0, nifree=0)
         touched = set()
         now = int(time.time())
         existing = dict(self.readdir(dino)).get(name)
@@ -230,6 +233,44 @@ class Writer(UFS):
         self.flush(totals, touched)
         return ino
 
+    def mkdir(self, path, mode=0o755, uid=0, gid=0):
+        dirpath, name = os.path.split('/' + path.strip('/'))
+        pino = self.lookup(dirpath)
+        if not stat.S_ISDIR(pino['mode']):
+            raise ValueError('%s is not a directory' % dirpath)
+        if name in dict(self.readdir(pino)):
+            raise ValueError('%s exists' % path)
+        totals = dict(ndir=1, nbfree=0, nffree=0, nifree=0)
+        touched = set()
+        now = int(time.time())
+        ino = self.allocinode(pino['ino'] // self.ipg, totals)
+        c = ino // self.ipg
+        touched.add(c)
+        self.add(self.cgblk(c), CG_CS, 1)
+        # one directory block (DIRBLKSIZ) in a fragment of a fresh block, as 4.3BSD's
+        # mkdir makes it: "." and ".."
+        cb, bno = self.allocblock(c, totals)
+        self.setfrags(cb, bno, 1, False, self.tally(totals, cb, touched))
+        fragno = cb * self.fpg + bno
+        blk = struct.pack('>IHH4s', ino, 12, 1, b'.') + \
+            struct.pack('>IHH4s', pino['ino'], DIRBLKSIZ - 12, 2, b'..')
+        self.write(self.frag_off(fragno), blk.ljust(self.fsize, b'\0'))
+        raw = bytearray(128)
+        struct.pack_into('>HhHH', raw, 0, stat.S_IFDIR | mode, 2, uid, gid)
+        struct.pack_into('>ii', raw, 8, 0, DIRBLKSIZ)
+        struct.pack_into('>iiiiii', raw, 16, now, 0, now, 0, now, 0)
+        struct.pack_into('>i', raw, 40, fragno)
+        struct.pack_into('>i', raw, 104, self.fsize // 512)
+        struct.pack_into('>i', raw, 108, int.from_bytes(os.urandom(4), 'big') >> 1)
+        self.write(self.inode_off(ino), bytes(raw))
+        self.adddirent(pino, name, ino)
+        # the new ".." is a link to the parent
+        praw = bytearray(pino['raw'])
+        self.add(praw, 2, 1, '>h')
+        self.write(self.inode_off(pino['ino']), bytes(praw))
+        self.flush(totals, touched)
+        return ino
+
     def tally(self, totals, c, touched):
         touched.add(c)
         return totals
@@ -267,7 +308,7 @@ class Writer(UFS):
             struct.pack_into('>16s', cs, 16 * c, bytes(cg[CG_CS:CG_CS + 16]))
             self.write(self.frag_off(self.cgstart(c) + self.cblkno), bytes(cg))
         self.write(self.frag_off(self.csaddr), bytes(cs))
-        for field, off in (('nbfree', 4), ('nifree', 8), ('nffree', 12)):
+        for field, off in (('ndir', 0), ('nbfree', 4), ('nifree', 8), ('nffree', 12)):
             self.add(self.sb, SB_CSTOTAL + off, totals[field])
         struct.pack_into('>i', self.sb, 32, int(time.time()))
         self.write(8192, bytes(self.sb[:struct.unpack('>i', self.sb[104:108])[0]]))
@@ -431,6 +472,15 @@ def main():
         uid, gid = (int(args[3]), int(args[4])) if len(args) > 4 else (None, None)
         ino = w.put(args[0], args[1], mode, uid, gid)
         print('%s: inode %d%s' % (args[1], ino, '' if apply else ' (not written: no --apply)'))
+        return
+    if cmd == 'mkdir':
+        w = Writer(img, part, write=apply)
+        if not apply:
+            w.write = lambda off, data: None
+        mode = int(args[1], 8) if len(args) > 1 else 0o755
+        uid, gid = (int(args[2]), int(args[3])) if len(args) > 3 else (0, 0)
+        ino = w.mkdir(args[0], mode, uid, gid)
+        print('%s: inode %d%s' % (args[0], ino, '' if apply else ' (not written: no --apply)'))
         return
     raise SystemExit(__doc__)
 
