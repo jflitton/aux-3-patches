@@ -239,8 +239,10 @@ say "Making a patched copy of $name (this takes a few minutes)."
 # src: the disk the checks read. A zip is unpacked straight into the new disk.
 case $aux in
 *.zip|*.ZIP)
-	dsk=$(unzip -Z1 "$aux" 2>/dev/null | grep -v '^__MACOSX/' | grep -i '\.dsk$' | head -1)
-	[ -n "$dsk" ] || die "There's no .dsk disk image inside $name"
+	# Shoebill's zips hold a .dsk (A/UX 3.1) or a .iso (A/UX 3.0)
+	dsk=$(unzip -Z1 "$aux" 2>/dev/null | grep -v '^__MACOSX/' |
+		grep -Ei '\.(dsk|iso|img|hda|hd)$' | head -1)
+	[ -n "$dsk" ] || die "There's no disk image inside $name"
 	say "  Unpacking $name ..."
 	made=1
 	unzip -p "$aux" "$dsk" > "$out" 2>> "$log" || fail "couldn't unpack $name."
@@ -252,6 +254,14 @@ case $aux in
 esac
 root=$(python3 -I tools/ufs.py "$src" find 'Root&Usr' 2>/dev/null | awk '{ print $1 }')
 [ -n "$root" ] || die "$name doesn't look like an A/UX disk image."
+# another release is named plainly; a 3.1 disk still has to pass its patches' checks
+release=$(python3 -I tools/ufs.py "$src" cat "$root" /etc/RELEASE_ID 2>/dev/null |
+	sed -n 's|.*A/UX \([0-9][0-9.]*\).*|\1|p' | head -1)
+case $release in
+''|3.1|3.1.*) ;;
+*) die "$name is A/UX $release, but these patches are for A/UX 3.1. Start from an A/UX 3.1
+disk image, such as AUX_3_1_1GB_Use_In_Shoebill.zip." ;;
+esac
 for p in $PATCHES; do
 	want $p && check_$p
 done

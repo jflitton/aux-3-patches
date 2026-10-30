@@ -91,7 +91,7 @@ miss on the 605: check how `Patch.067C` is keyed before trusting it.
 Headless MAME run: `mame macqd605 -noreadconfig -rompath roms -cfg_directory … -nvram_directory …
 -snapshot_directory … -video none -sound none -nothrottle -seconds_to_run N` (writes a final PNG).
 
-### Prebuilt HD images (`images/*.zip`, Shoebill images from Jeff)
+### Prebuilt HD images (`images/*.zip`, Shoebill images)
 Unzipped read-only to `extracted/hd/`. Boot only throwaway copies: a qcow2 overlay for
 QEMU, an APFS clone (`cp -c`) for MAME.
 
@@ -825,3 +825,7 @@ square wave itself; it evidently goes through `SysBeep`). Shutdown and restart w
 - Disassemble `launch` / A/UX Startup for any machine checks and the kernel-info layout.
 - Base version: **3.1** (Jeff, 2026-10-28 late; was 3.0.1). Patches are written against
   symbol names and instruction patterns; the same tools also build for 3.0.1.
+- A/UX 3.0 (`Apple_UNIX.iso` in `AUX_3_Use_in_Shoebill.zip`) is not supported (Jeff,
+  2026-10-30): no `memcdjsize` or Cuda in its kernel, and its System 7.0.x is too old for
+  Enablers 065 and 003. No spec verifies on it; `make-disk.sh` reads `/etc/RELEASE_ID` and
+  refuses any release but 3.1 by name.

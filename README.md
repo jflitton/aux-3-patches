@@ -16,7 +16,8 @@ Apple software is included.
 - macOS or Linux, with Python 3.9 or later.
 - hfsutils and unar, for `--memcjr` and `--sonora` (`brew install hfsutils unar` on macOS).
 - An A/UX 3.1 disk image. Tested with `AUX_3_1_1GB_Use_In_Shoebill.zip`, widely archived
-  online; pass the zip or the `.dsk` inside it.
+  online; pass the zip or the `.dsk` inside it. (`AUX_3_Use_in_Shoebill.zip` is A/UX 3.0,
+  which won't work.)
 - Whatever your patches need (see their pages).
 
 ## Usage
