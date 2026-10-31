@@ -5,7 +5,9 @@
 #
 #	dp0	IP-address	broadcast-address	[netmask [gateway]]
 #
-#	The gateway, if given, becomes the default route.
+#	The gateway, if given, becomes the default route. netsetup writes the line, or
+#	for DHCP puts dp0 in /etc/dhcpc.conf instead and gets its address at the end of
+#	the boot, from /etc/inittab.
 #
 PATH=/bin:/usr/bin:/etc:/usr/etc
 NETADDRS=/etc/NETADDRS
@@ -18,7 +20,11 @@ fi
 set '' `/bin/sed -n '/^dp0[ 	]/p' $NETADDRS 2>/dev/null`
 shift
 if [ $# -lt 2 ]; then
-	echo "dp0: no dp0 line in $NETADDRS; not configured"
+	if /bin/grep '^dp0$' /etc/dhcpc.conf > /dev/null 2>&1; then
+		echo "dp0: address by DHCP, from netsetup, once A/UX is up"
+	else
+		echo "dp0: no dp0 line in $NETADDRS; not configured (netsetup sets it up)"
+	fi
 	exit 0
 fi
 if [ -n "$4" ]; then

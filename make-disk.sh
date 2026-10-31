@@ -29,8 +29,8 @@ Patches (choose one or more):
 
 Each patch is described in patches/NAME/README.md.
 
-Network settings for --daynaport (all optional; leave them out and run
-/etc/dpsetup on the Mac once instead):
+Network settings for --daynaport (all optional; leave them out and the Mac gets
+its address by DHCP, from your router):
   --ip ADDRESS       the Mac's IP address, e.g. 192.168.1.50
   --netmask MASK     your network's netmask (normally 255.255.255.0, the default)
   --gateway ADDRESS  your router (default: the IP address with .1 at the end)
@@ -107,7 +107,7 @@ apply_date() { run sh patches/date/apply.sh "$out"; }
 NEEDS_daynaport="cmp:diffutils"
 title_daynaport() {
 	if [ -n "$ip" ]; then say "DaynaPORT networking, set to IP address $ip"
-	else say "DaynaPORT networking"; fi
+	else say "DaynaPORT networking, by DHCP"; fi
 }
 check_daynaport() {
 	is_aux31 || die "$name isn't an A/UX 3.1 disk: its kernel is different."

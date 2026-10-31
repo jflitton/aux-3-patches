@@ -32,7 +32,7 @@ Each patch folder holds:
 | `memcjr` | `--memcjr ENABLER` | System Enabler 065 into the Mac OS System Folder (on a `dd` copy of the HFS partition, as hfsutils rewrites whatever it mounts); `bin/kernel-605.txt` on `/unix` and on `/etc/config.d/newunix`, which autoconfig links new kernels from; `src/toolbox-605.txt` |
 | `sonora` | `--sonora ENABLER` | System Enabler 003 into the Mac OS System Folder (as for `memcjr`); `bin/kernel-sonora.txt` on `/unix` and `/etc/config.d/newunix`; `src/toolbox-sonora.txt`; `src/snd-sonora.txt` on `/unix` and `/etc/boot.d/snd` |
 | `date` | `--date` | `src/date-y2k.txt` on `/bin/date` |
-| `daynaport` | `--daynaport` | `bin/dayna` linked into `/unix` by `tools/linkmod.py` as autoconfig would, and in `/etc/boot.d` with `src/master` for autoconfig's own relinks; `src/startup`, `src/dpsetup`; given an IP address, `/etc/NETADDRS` and `/etc/resolv.conf` |
+| `daynaport` | `--daynaport` | `bin/dayna` linked into `/unix` by `tools/linkmod.py` as autoconfig would, and in `/etc/boot.d` with `src/master` for autoconfig's own relinks; `src/startup`; the netsetup package, `bin/netsetup-*.pkg` (from aux-3-ports, by `update-netsetup.sh`), installed by `tools/pkgput.py` as pkg would; given an IP address, `/etc/NETADDRS` and `/etc/resolv.conf`, otherwise `/etc/dhcpc.conf` (DHCP); `/usr/local/bin` in root's PATH |
 | `pkg` | `--pkg` | `bin/pkg` as `/usr/local/bin/pkg`; `bin/record`, completed with the file's size and checksum, as `/usr/local/lib/pkg/installed/pkg`, making the directories on the way; `/usr/local/bin` in root's PATH in `/.profile` and `/.login` |
 
 `make-disk.sh` applies them in that order and then checks the A/UX file system like fsck
@@ -107,6 +107,7 @@ The tools run on the system `python3` (3.9 or later) with only the standard libr
 | `tools/build-patches.sh` | Rebuild or check every patch's `bin/` |
 | `tools/binpatch.py` | Apply a patch spec to a file, or to files inside a disk image (clones only) |
 | `tools/linkmod.py` | Link a `boot.d` module into a configured `/unix` as autoconfig would; `check` proves it on Apple's own |
+| `tools/pkgput.py` | Install a pkg package on a disk image as pkg would: files, record, `/etc/shells` and `/etc/inittab` lines |
 | `tools/elf2coff.py` | Turn an `m68k-elf-ld -r` object into an A/UX COFF module; check it |
 | `tools/ufsput.py` | Write files (up to 16MB) and make directories in an A/UX UFS partition (clones only); check a partition like fsck |
 | `tools/ufs.py` | Read-only A/UX UFS reader (partitions, find, ls with device numbers, cat, extract, where) |

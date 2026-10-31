@@ -41,6 +41,7 @@ ufsput put "$tmp/record" /usr/local/lib/pkg/installed/pkg 644 0 0
 # root's PATHs end ":/usr/etc:."; other users' already end ":/usr/etc:/usr/local/bin"
 for f in /.profile /.login; do
 	$py tools/ufs.py "$disk" cat "$root" $f > "$tmp/dot" 2>/dev/null || continue
+	grep -q ':/usr/etc:/usr/local/bin:\."' "$tmp/dot" && continue	# --daynaport did it
 	sed 's|:/usr/etc:\."|:/usr/etc:/usr/local/bin:."|' "$tmp/dot" > "$tmp/dot.new"
 	if cmp -s "$tmp/dot" "$tmp/dot.new"; then
 		echo "$f: no PATH for root to change"

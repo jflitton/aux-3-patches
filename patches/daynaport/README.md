@@ -9,7 +9,8 @@ nothing if there's no adapter.
 
 ## Network settings
 
-Optional. You can also leave them out and run `/etc/dpsetup` on the Mac once instead.
+Optional. Leave them out and the Mac gets its address by DHCP from your router, as other
+computers do.
 
 | Option | Default |
 |---|---|
@@ -28,12 +29,18 @@ does that job.
 
 ## On the Mac
 
-In CommandShell:
+The disk also gets netsetup, which sets up the network. In CommandShell, as root:
 
-- `/etc/dpsetup` sets or changes the network settings. They take effect at once and at
-  every start.
+- `netsetup` shows the settings and the address dp0 has now.
+- `netsetup dp0 dhcp` gets dp0's address by DHCP.
+- `netsetup dp0 192.168.1.50 gateway 192.168.1.1 dns 192.168.1.1` sets it by hand.
+- Type `netsetup` and press Command-K for a dialog that does the same.
 - `/usr/etc/ping 192.168.1.1 64 3` checks the connection.
 - `root` has no password: set one with `passwd` before joining a network you share.
+
+Changes take effect at once and at every start. Change dp0 at the Mac itself, not over
+telnet: the connection drops when the address changes. netsetup is also a package for
+pkg, and `pkg upgrade` keeps it up to date if you have pkg (`--pkg`).
 
 ## Compatibility
 
@@ -53,7 +60,8 @@ Type `/etc/ifconfig dp0` in CommandShell:
 
 - **No such interface:** A/UX didn't find the adapter. Check its setup against your
   device's guide (above).
-- **No `inet` address, or names don't resolve:** run `/etc/dpsetup`.
+- **No address, or names don't resolve:** `netsetup` shows what's wrong. With DHCP, see
+  `/usr/adm/dhcpc.log`; DHCP needs a router that answers, as home routers do.
 
 **"Already has the DaynaPORT network driver":** start from the original disk image.
 
@@ -69,8 +77,9 @@ Type `/etc/ifconfig dp0` in CommandShell:
 | `src/module.ld` | Linker script for the module |
 | `src/master` | Its `/etc/master.d` entry |
 | `src/startup` | `/etc/startup.d/dayna`: brings `dp0` up from `/etc/NETADDRS` at every start |
-| `src/dpsetup` | `/etc/dpsetup` |
 | `bin/dayna` | The driver module |
+| `bin/netsetup-*.pkg` | The netsetup package, from aux-3-ports |
+| `update-netsetup.sh AUX-3-PORTS` | Builds that package in an aux-3-ports checkout and copies it here |
 | `NOTES.md` | How the driver works and is linked into `/unix`; speed trials |
 
 Based on Jeff Flitton's

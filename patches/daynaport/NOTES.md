@@ -17,7 +17,9 @@ are under Throughput. 0.1-probe (one READ/WRITE test at boot) worked there too, 
 Disk: `make-disk.sh ... --daynaport`, or `apply.sh DISK [IP [NETMASK
 [GATEWAY [DNS]]]]` on a copy of any A/UX 3.1 disk, links `dp0` into `/unix` on the host,
 so the first boot needs no relink and restart; with IP it also writes `NETADDRS` and
-`resolv.conf` as `dpsetup` would.
+`resolv.conf` as netsetup would, and without, puts `dp0` in `/etc/dhcpc.conf` for DHCP.
+netsetup (aux-3-ports) sets dp0 up afterwards and gets its DHCP leases; the patch bundles
+its package. It replaced `/etc/dpsetup` on 2026-10-31.
 
 DNS needs nothing from the driver: 3.1's libc has the BIND 4.8 resolver, which telnet, ftp
 and ping link statically. `gethostbyname` tries `res_search` (servers from
@@ -36,10 +38,9 @@ every `/etc/hosts` lookup wait out the timeouts first. `nslookup` is
   `/etc/NETADDRS` line, `dp0 address broadcast [netmask [gateway]]` (the gateway, an
   addition, becomes the default route), as `/etc/startup.d/ae6` does for `ae` cards.
   autoconfig puts a `/etc/startup.d/<module>` line in `/etc/startup` for every module that
-  has such a script. `/etc/dpsetup` (`src/dpsetup`, ksh like Apple's scripts) asks
-  for address, netmask, gateway and DNS server (offering the current ones), writes the
-  `dp0` line and `resolv.conf`'s `nameserver`, replaces the default route and runs the
-  startup script.
+  has such a script. With no `dp0` line it does nothing: either dp0 is in
+  `/etc/dhcpc.conf`, and `netsetup boot` (from `/etc/inittab`, after `/etc/rc`) gets it
+  an address by DHCP, or it isn't set up.
 - One command at a time on the target. `dp_run`, called only through `softcall` (softint
   runs at IPL 0), finishes the completed command and issues the next: a queued frame
   first, except that a due READ goes before a second WRITE in a row. The SCSI Manager's

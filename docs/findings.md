@@ -803,6 +803,26 @@ channels. **v4** on Jeff's SD card as `HD0_aux31-lc3-v4.hda` (v3 kept as
 Sound control panel (expected silent there, as the panel was taken to play the System's
 square wave itself; it evidently goes through `SysBeep`). Shutdown and restart work.
 
+## Networking: DHCP, and MacTCP under A/UX (2026-10-31)
+
+A/UX 3.1 has no tool for setting up TCP/IP beyond `newconfig`, which asks for an Ethernet
+card's address and netmask once, while it builds a kernel (`/etc/startup.d/ae6 -i`), and
+never for a gateway or DNS servers. The MacTCP control panel configures nothing under
+A/UX: it's MacTCP 1.1 without its `.ipp` driver. The Toolbox patches
+(`/mac/lib/Patches/Patch.0178`, `.067C`) have one of their own (`mactcpdrvr.c`, `tcp.c`,
+`udp.c`) on A/UX's sockets, reading the interface's address with an ioctl and DNS from
+`/etc/resolv.conf`, so Mac programs follow whatever A/UX is set to.
+
+DHCP works from an ordinary UDP socket (tried on the 605's DaynaPORT): with the interface
+at 0.0.0.0, broadcast 255.255.255.255 and no other default route, the DISCOVER leaves
+through it and the server's broadcast reply comes back in. A/UX takes 0.0.0.0 as an
+address; the kernel widens its netmask to the class's (255.0.0.0), and its network route
+is the default route. netsetup's `dhcpc` does this at boot: on the 605, a `--daynaport`
+disk made without `--ip` had dp0's address from the router at its first start. Details,
+and A/UX's ioctl numbers (not 4.3BSD's), are in aux-3-ports' decisions ("netsetup"). A/UX's `ifconfig` can't take 255.255.255.255 (inet_addr gives -1),
+and `route` exits 1 even when it worked. `nslookup` (BIND 4.8's) times out against a
+UniFi router whose DNS the libc resolver uses fine; not looked into.
+
 ## Open items
 - LC III: a 25MHz board (Gestalt 27) and the Performas on real hardware; sound input, the
   floppy drive and the serial ports (found by the kernel, not exercised). The DFAC volume

@@ -8,11 +8,14 @@
 #     (bin/dayna, from build.sh) and /etc/master.d/dayna (src/master), and the lines
 #     autoconfig keeps for it in /etc/master and /etc/startup,
 #   - /etc/startup.d/dayna (src/startup: configures dp0 from /etc/NETADDRS at every
-#     boot) and /etc/dpsetup (src/dpsetup: asks for the addresses, writes
-#     NETADDRS and resolv.conf),
+#     boot),
+#   - the netsetup package (bin/netsetup-*.pkg, from aux-3-ports: netsetup, dhcpc and
+#     netsetup's Commando dialog), installed as pkg would install it, with its record
+#     and its /etc/inittab line, and /usr/local/bin in root's PATH,
 #   - with IP, the dp0 line of /etc/NETADDRS and the nameserver of /etc/resolv.conf, as
-#     dpsetup writes them (default netmask 255.255.255.0, gateway IP's .1, DNS server
-#     the gateway): dp0 is up from the first boot. Without IP, run /etc/dpsetup once.
+#     netsetup writes them (default netmask 255.255.255.0, gateway IP's .1, DNS server
+#     the gateway); without, dp0 in /etc/dhcpc.conf, so it gets its address by DHCP.
+#     Either way dp0 is up from the first boot, and netsetup changes it later.
 # Check the disk afterwards (tools/ufsput.py DISK PART check; make-disk.sh does).
 set -e
 if [ $# -lt 1 ] || [ $# -gt 5 ]; then
@@ -92,13 +95,32 @@ put "$tmp/unix.dp" /unix
 put $p/bin/dayna /etc/boot.d/dayna 640 2 2
 put $p/src/master /etc/master.d/dayna 644 2 2
 put $p/src/startup /etc/startup.d/dayna 750 2 2
-put $p/src/dpsetup /etc/dpsetup 750 0 0
 put "$tmp/startup" /etc/startup
 put "$tmp/master" /etc/master
 if [ -n "$ip" ]; then
 	put "$tmp/netaddrs" /etc/NETADDRS 644 0 0
 	put "$tmp/resolv.conf" /etc/resolv.conf 644 0 0
+else
+	{ echo "# Interfaces that get their address by DHCP (netsetup changes this)"
+	  echo dp0; } > "$tmp/dhcpc.conf"
+	put "$tmp/dhcpc.conf" /etc/dhcpc.conf 644 0 0
+	echo "dp0 gets its address by DHCP"
 fi
+
+# netsetup, as pkg would install it
+if $py tools/ufs.py "$disk" ls "$root" /usr/local/lib/pkg/installed/netsetup > /dev/null 2>&1
+then
+	echo "netsetup is already on the disk"
+else
+	$py tools/pkgput.py "$disk" "$root" $p/bin/netsetup-*.pkg aux-3-patches
+fi
+# root's PATHs end ":/usr/etc:."; other users' already end ":/usr/etc:/usr/local/bin"
+for f in /.profile /.login; do
+	get $f > "$tmp/dot" 2>/dev/null || continue
+	grep -q ':/usr/etc:/usr/local/bin:\."' "$tmp/dot" && continue	# --pkg did it
+	sed 's|:/usr/etc:\."|:/usr/etc:/usr/local/bin:."|' "$tmp/dot" > "$tmp/dot.new"
+	cmp -s "$tmp/dot" "$tmp/dot.new" || put "$tmp/dot.new" $f
+done
 # what A/UX will read back
 $py tools/ufs.py "$disk" cat "$root" /unix | cmp - "$tmp/unix.dp"
 echo "$disk: DaynaPORT networking added"
