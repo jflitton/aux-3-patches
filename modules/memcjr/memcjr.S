@@ -138,100 +138,13 @@ pi_offsets:
 	.word	0x00, 0x04, 0x08, 0x0c, 0x28, 0x2c, 0x30, 0x34, 0x38, -1
 
 /*
- * In place of memsize's "jsr banksize" for machines without djMEMC, Orwell or RBV
- * (with "moveq #0,d0; move.l d0,-(sp)" before it shortened to "clr.l -(sp)"). Other
- * machines go to banksize itself.
- *
- * banksize(start, from, bank) probes RAM a page at a time upward from `from' with no
- * limit, until a page fails its pattern or alias checks. A bus error on the way (real
- * MEMCjr past the last SIMM?) goes to _start's memerror%, which abandons memsize with the
- * bank unrecorded. This is banksize's algorithm with a bus error catch around each probe
- * (as pdsprobe does for PDS cards) and a limit from Mac OS: its BufPtr, which launch
- * leaves at kstart+$10C (MemTop there is the kernel's end), rounded up to 1MB. In MAME
- * that is the RAM size exactly: Mac OS keeps 0x20000-0x50000 at the top for itself.
- * Same results: bank = {start, from, end, 1}, numbanks++, probed pages zeroed, lowmem 0
- * restored. (modules/common/hooks.S's BANKSIZE is this with PhysMemTop as well, for Mac OS
- * in 24-bit mode.)
+ * In place of memsize's "jsr banksize" for machines without djMEMC, Orwell or RBV (see
+ * modules/common/hooks.S). Its limit, the larger of Mac OS's BufPtr and PhysMemTop, is the
+ * end of RAM: in MAME, BufPtr rounded up to 1MB is the RAM size exactly (Mac OS keeps
+ * 0x20000-0x50000 at the top for itself), and PhysMemTop covers Mac OS in 24-bit mode,
+ * where BufPtr is below 8MB.
  */
-	.globl	b605_banksize
-b605_banksize:
-	jbsr	ourmac
-	jbne	1f
-	jmp	banksize
-1:	movem.l	%d2-%d7/%a2-%a4,-(%sp)
-	move.l	9*4+12(%sp),%a2		/* bank */
-	move.l	9*4+8(%sp),%d2		/* from */
-	add.l	#0xfff,%d2
-	and.l	#-0x1000,%d2
-	move.l	9*4+4(%sp),(%a2)	/* bank->start */
-	move.l	%d2,4(%a2)
-	move.l	%d2,8(%a2)		/* bank->end: next page to probe */
-	move.l	kstart,%a0
-	move.l	0x10c(%a0),%d7		/* Mac OS BufPtr */
-	add.l	#0xfffff,%d7
-	and.l	#-0x100000,%d7		/* limit */
-	cmp.l	%d2,%d7
-	jbhi	7f
-	move.l	#0x40000000,%d7		/* implausible: RAM space ends at the ROM */
-7:
-	moveq	#1,%d3			/* d3 = first power of two >= from */
-2:	cmp.l	%d2,%d3
-	jbcc	3f
-	add.l	%d3,%d3
-	jbra	2b
-3:	move.l	%d3,%a4
-	move.l	%a4,%d0
-	lsr.l	#1,%d0
-	move.l	%d0,%a4			/* alias sentinel at d3/2 */
-	move.l	(%a4),%d5
-	move.l	0,%d4			/* lowmem 0, to catch wrap-around */
-	movec	%vbr,%a1
-	move.l	8(%a1),%d6		/* bus error vector */
-	lea	ram_berr(%pc),%a0
-	move.l	%a0,8(%a1)
-	move.l	%sp,%a3			/* for ram_berr */
-4:	move.l	8(%a2),%a0
-	cmp.l	%d7,%a0
-	jbcc	ram_end
-	move.w	#0x5aa5,(%a0)
-	move.w	#0xa55a,2(%a0)
-	cmp.l	0,%d4
-	jbne	ram_end
-	cmp.w	#0x5aa5,(%a0)
-	jbne	ram_end
-	cmp.w	#0xa55a,2(%a0)
-	jbne	ram_end
-	cmp.l	(%a4),%d5
-	jbeq	5f
-	move.l	%d5,(%a4)
-	jbra	ram_end
-5:	move.l	#0x1000,-(%sp)
-	move.l	%a0,-(%sp)
-	jsr	bzero
-	addq.l	#8,%sp
-	add.l	#0x1000,8(%a2)
-	cmp.l	8(%a2),%d3
-	jbcc	4b
-	move.l	%d3,%a4			/* crossed d3: watch it for aliases now */
-	move.l	(%a4),%d5
-	add.l	%d3,%d3
-	jbra	4b
-
-ram_berr:				/* bus error while probing: end of RAM */
-	move.l	%a3,%sp
-ram_end:
-	movec	%vbr,%a1
-	move.l	%d6,8(%a1)
-	move.l	%d4,0
-	move.l	8(%a2),%d0
-	cmp.l	4(%a2),%d0
-	jbls	6f
-	moveq	#1,%d0
-	move.l	%d0,12(%a2)
-	addq.l	#1,numbanks
-6:	CKPT	9			/* RAM sized */
-	movem.l	(%sp)+,%d2-%d7/%a2-%a4
-	rts
+	BANKSIZE b605_banksize, 9
 
 /*
  * The hooks below run with the MMU on, so they can live in .text.boot605.extra (egret_reset's

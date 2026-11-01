@@ -32,7 +32,7 @@ It adds System Enabler 065 to the disk's Mac OS, teaches the kernel the 605's Cu
 | **Mac** | Quadra 605 | LC 475, Performa 475 and 476 (work in MAME) | LC 575 family (not supported yet) |
 | **Processor** | Full 68040 | | 68LC040 |
 | **Clock speed** | 33 MHz | 25 MHz, the standard 605 (works in MAME) | |
-| **Memory** | 132 MB | Other amounts | |
+| **Memory** | 132 MB | Other amounts; 32-bit addressing off | |
 | **Video memory** | 1 MB | 512 KB, the 605's standard amount | |
 | **A/UX disk** | `AUX_3_1_1GB_Use_In_Shoebill.zip` | Other A/UX 3.1 disks | |
 
@@ -41,6 +41,11 @@ Tested: starts up to the A/UX desktop, with video at every color depth.
 ## Troubleshooting
 
 **A/UX Startup won't launch A/UX:** the processor is a 68LC040.
+
+**"Command is respawning too rapidly" for `catsearchd`:** A/UX found less than 16 MB of
+memory, the minimum its Find File daemon asks for. Disks made with this patch before
+November 2026 found only 8 MB if 32-bit addressing was off in the Memory control panel;
+make a new disk.
 
 ## For developers
 

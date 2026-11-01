@@ -870,8 +870,16 @@ lists 0x4b 0x32 0x4d 0x4a. A group is chosen if the enabler lists any of its Box
 with their own enablers only. 003 1.0 (0x15 alone) is still accepted: it's fine on an LC III
 at 25MHz.
 
-**The 605's RAM probe** still stops at BufPtr (the 24-bit mode fix went into the Sonora
-copy only), kept so the refactor changes no bytes. Sharing `BANKSIZE` is next.
+**The 605's RAM probe** stopped at BufPtr alone (the 24-bit mode fix went into the Sonora
+copy only). It stayed so through the refactor, which then changed no bytes; afterwards the
+605 took the shared `BANKSIZE`. The only change to its kernel is the PhysMemTop test, 10
+bytes in `b605_banksize` (.text 1934 of 2028 bytes, the checkpoint build 1990); the code
+after it is the same, moved up. The 605 and 475 do run System 7.1 in 24-bit mode (32-bit
+addressing is a Memory control panel setting on them, on by default), where A/UX had 8MB
+whatever was fitted. In 32-bit mode BufPtr and PhysMemTop round up to the same 1MB, so
+nothing changes there. On Jeff's 605 (`HD0_aux31-605-ram.hda`: `--enabler` 065,
+`--daynaport`, `--date`, `--pkg`), with 32-bit addressing on, A/UX boots with all its RAM,
+as before. Not yet run with 32-bit addressing off.
 
 **Color Classic II, LC 520, LC 550** (Sonora with Cuda). Linux `config.c` gives the Color
 Classic II the LC III's types but `MAC_ADB_CUDA`. The LC III's ROM (`ecbbc41c`, $067C) has
@@ -889,8 +897,7 @@ the Toolbox's 0x32 and 0x4a-0x4d to 0x0C, enabler 403; first in MAME's `maclc550
 ## Open items
 - A Sonora + Cuda group (LC 520, LC 550, Color Classic II): see 2026-11-01. MAME needs
   `ede66cbd.rom`.
-- q605: use the shared `BANKSIZE` (PhysMemTop as well as BufPtr); a 605 with Mac OS in
-  24-bit mode would get 8MB.
+- A real 605 with 32-bit addressing off: the shared `BANKSIZE` should size all its RAM.
 - LC III: a 25MHz board (Gestalt 27) and the Performas on real hardware; sound input, the
   floppy drive and the serial ports (found by the kernel, not exercised). The DFAC volume
   is set once from Mac OS's SdVolume while A/UX's control drives ASC $806, so a low Mac OS
