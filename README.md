@@ -6,16 +6,20 @@ Apple software is included.
 
 | Patch | Option | What it does | A/UX | Macs |
 |---|---|---|---|---|
-| [MEMCjr](patches/memcjr/README.md) | `--memcjr ENABLER` | Runs A/UX on the Quadra 605, and in theory the LC/Performa 475 | 3.1 | Quadra 605 with a full 68040; LC 475 and Performa 475/476 untested |
-| [Sonora](patches/sonora/README.md) | `--sonora ENABLER` | Runs A/UX on the LC III and LC III+ | 3.1 | LC III, LC III+, Performa 450/460/466/467 with an FPU; tested on an LC III at 33 MHz |
+| [Quadra 605](patches/q605/README.md) | `--enabler` with System Enabler 065 | Runs A/UX on the Quadra 605, and in theory the LC/Performa 475 | 3.1 | Quadra 605 with a full 68040; LC 475 and Performa 475/476 untested |
+| [LC III](patches/lc3/README.md) | `--enabler` with System Enabler 003 | Runs A/UX on the LC III and LC III+ | 3.1 | LC III, LC III+, Performa 450/460/466/467 with an FPU; tested on an LC III at 33 MHz |
 | [DaynaPORT](patches/daynaport/README.md) | `--daynaport` | Networking over a BlueSCSI's or ZuluSCSI's Wi-Fi | 3.1 | Tested on the Quadra 605 and LC III |
 | [Date](patches/date/README.md) | `--date` | `date` works with years after 1999 | 3.1 | Any |
 | [pkg](patches/pkg/README.md) | `--pkg` | A package manager: installs software from package files or over the network | 3.1 | Any |
 
+For a Mac that A/UX 3.1 doesn't know, give `--enabler` the System Enabler that Mac needs
+for System 7.1, as you downloaded it: the enabler picks the patch for your Mac, and goes on
+the disk too. A disk is for one of these Macs.
+
 ## Requirements
 
 - macOS or Linux, with Python 3.9 or later.
-- hfsutils and unar, for `--memcjr` and `--sonora` (`brew install hfsutils unar` on macOS).
+- hfsutils and unar, for `--enabler` (`brew install hfsutils unar` on macOS).
 - An A/UX 3.1 disk image. Tested with `AUX_3_1_1GB_Use_In_Shoebill.zip`, widely archived
   online; pass the zip or the `.dsk` inside it. (`AUX_3_Use_in_Shoebill.zip` is A/UX 3.0,
   which won't work.)
@@ -28,9 +32,9 @@ Apple software is included.
 A Quadra 605 disk with every patch, and an LC III disk:
 
     ./make-disk.sh AUX_3_1_1GB_Use_In_Shoebill.zip HD0_AUX.hda \
-        --memcjr System_Enabler_065_12-sea.bin --daynaport --date --pkg --ip 192.168.1.50
+        --enabler System_Enabler_065_12-sea.bin --daynaport --date --pkg --ip 192.168.1.50
     ./make-disk.sh AUX_3_1_1GB_Use_In_Shoebill.zip HD0_AUX.hda \
-        --sonora System_Enabler_003_1.1.sea.bin --date
+        --enabler System_Enabler_003_1.1.sea.bin --date
 
 `--help` lists every option. If a step fails, the partial disk is removed and the log is
 left in `NEW-DISK.log`; each patch's page covers its own problems.
@@ -43,8 +47,8 @@ Down**: a power cut can damage the A/UX file system.
 
 ## For developers
 
-Each patch folder holds its source (`src/`), what's built from it (`bin/`) and its scripts.
-See [docs/development.md](docs/development.md).
+Each patch folder holds its source (`src/`), what's built from it (`bin/`) and its scripts;
+code the Mac patches share is in `modules/`. See [docs/development.md](docs/development.md).
 
 ## License
 

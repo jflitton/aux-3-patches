@@ -1,5 +1,6 @@
 /*
- * Cuda transport for the A/UX Egret driver (Quadra 605 / LC 475 / LC 575).
+ * Cuda transport for the A/UX Egret driver, for the Macs with Cuda in place of Egret (in
+ * the q605 group, the Quadra 605 and LC/Performa 475).
  *
  * Cuda speaks the same packets as Egret but drives the VIA1 port B handshake
  * differently (see Linux drivers/macintosh/via-cuda.c):
@@ -14,11 +15,12 @@
  * valid_packet, the byte-count tables, resprec and the fdb/key completions.
  * Polled like the original; callers run at spl1 or above.
  *
- * Only a Quadra 605 or LC/Performa 475 gets Cuda signalling. A/UX's Egret machines (IIsi,
- * IIvi, IIvx, Performa 600, Quadra 900 and 950) reach the same entry points, and there the
- * Egret is left alone: resets do nothing, requests fail as on a timeout, and interrupts are
- * only acknowledged. That keeps a patched disk booted on one of them from driving the
- * Egret's handshake lines the Cuda way; this patch does not support them.
+ * Only the group's Macs (ourmac, from the board module linked with this) get Cuda
+ * signalling. A/UX's Egret machines (IIsi, IIvi, IIvx, Performa 600, Quadra 900 and 950)
+ * reach the same entry points, and there the Egret is left alone: resets do nothing,
+ * requests fail as on a timeout, and interrupts are only acknowledged. That keeps a patched
+ * disk booted on one of them from driving the Egret's handshake lines the Cuda way; a
+ * kernel with this transport does not support them.
  */
 
 typedef unsigned char u8;
@@ -48,8 +50,8 @@ extern void	(*key_completion)(void);
 extern u8	keysw_position;
 extern u8	resprec[];
 
-/* boot605.S: 1 on a Quadra 605 or LC/Performa 475, from machineID */
-extern int	ismemcjr(void);
+/* the board module (modules/memcjr): 1 on the group's Macs, from machineID */
+extern int	ourmac(void);
 
 #define VIA1	((volatile u8 *)0x50000000)
 #define vBufB	0x0000
@@ -234,7 +236,7 @@ receive_unsolicited(int primed)
 	u8 buf[16];
 	int len;
 
-	if (!ismemcjr())
+	if (!ourmac())
 		return;
 	rx.data = buf;
 	rx.max = sizeof buf;
@@ -249,7 +251,7 @@ cuda_dispatch(struct egretpb *pb)
 	struct rx rx;
 	int s, i, r, tries;
 
-	if (!ismemcjr()) {
+	if (!ourmac()) {
 		pb->result = -1;
 		return 0;
 	}
@@ -336,7 +338,7 @@ pseudo(int cmd, int arg)
 void
 cuda_reset(void)
 {
-	if (!ismemcjr())
+	if (!ourmac())
 		return;
 	via_w(vDirB, (VIA1[vDirB] | TACK | TIP) & ~TREQ);
 	via_w(vACR, (VIA1[vACR] & ~SR_CTRL) | SR_EXT);

@@ -13,6 +13,7 @@ network driver, and linking it into `/unix`).
 |---|---|
 | `make-disk.sh` | The script for users: checks its inputs, copies the disk, runs the chosen patches' `apply.sh`, checks the result |
 | `patches/NAME/` | One folder per patch (below) |
+| `modules/` | Source the Mac patches share, one folder per part: `cuda/` (the Cuda transport), `memcjr/` and `sonora/` (board modules), `common/` (hooks the board modules share, and the checkpoint code) |
 | `tools/` | Tools the patches share, the build-all script, and emulator helpers (below) |
 | `docs/` | This guide and `findings.md` |
 | `build/` | Intermediate build files (ignored by git) |
@@ -29,8 +30,8 @@ Each patch folder holds:
 
 | Patch | Option | Applied by `apply.sh` |
 |---|---|---|
-| `memcjr` | `--memcjr ENABLER` | System Enabler 065 into the Mac OS System Folder (on a `dd` copy of the HFS partition, as hfsutils rewrites whatever it mounts); `bin/kernel-605.txt` on `/unix` and on `/etc/config.d/newunix`, which autoconfig links new kernels from; `src/toolbox-605.txt` |
-| `sonora` | `--sonora ENABLER` | System Enabler 003 into the Mac OS System Folder (as for `memcjr`); `bin/kernel-sonora.txt` on `/unix` and `/etc/config.d/newunix`; `src/toolbox-sonora.txt`; `src/snd-sonora.txt` on `/unix` and `/etc/boot.d/snd` |
+| `q605` | `--enabler` with System Enabler 065 | The enabler into the Mac OS System Folder (`tools/put-enabler.sh`, on a `dd` copy of the HFS partition, as hfsutils rewrites whatever it mounts); `bin/kernel.txt` on `/unix` and on `/etc/config.d/newunix`, which autoconfig links new kernels from; `src/toolbox.txt` |
+| `lc3` | `--enabler` with System Enabler 003 | The enabler into the Mac OS System Folder (as for `q605`); `bin/kernel.txt` on `/unix` and `/etc/config.d/newunix`; `src/toolbox.txt`; `src/snd.txt` on `/unix` and `/etc/boot.d/snd` |
 | `date` | `--date` | `src/date-y2k.txt` on `/bin/date` |
 | `daynaport` | `--daynaport` | `bin/dayna` linked into `/unix` by `tools/linkmod.py` as autoconfig would, and in `/etc/boot.d` with `src/master` for autoconfig's own relinks; `src/startup`; the netsetup package, `bin/netsetup-*.pkg` (from aux-3-ports, by `update-netsetup.sh`), installed by `tools/pkgput.py` as pkg would; given an IP address, `/etc/NETADDRS` and `/etc/resolv.conf`, otherwise `/etc/dhcpc.conf` (DHCP); `/usr/local/bin` in root's PATH |
 | `pkg` | `--pkg` | `bin/pkg` as `/usr/local/bin/pkg`; `bin/record`, completed with the file's size and checksum, as `/usr/local/lib/pkg/installed/pkg`, making the directories on the way; `/usr/local/bin` in root's PATH in `/.profile` and `/.login` |
@@ -48,10 +49,10 @@ only to the files it was written for. `tools/binpatch.py` only verifies unless g
 ## Building `bin/`
 
 The `bin/` files are built against the A/UX 3.1 `/unix` from `AUX_3_1_1GB.dsk`. The
-MEMCjr and Sonora kernel patches only touch the core kernel, which is the same in every
-A/UX 3.1 configuration, so they apply to any 3.1 `/unix`. The two are for different Macs
-and change some of the same places, so a disk takes one of them (`make-disk.sh` refuses
-both). The builds are reproducible. After changing a `src/`:
+Mac patches' kernel patches only touch the core kernel, which is the same in every A/UX 3.1
+configuration, so they apply to any 3.1 `/unix`. Each is for its own group of Macs and they
+change some of the same places, so a disk takes one of them (`make-disk.sh` takes one
+enabler). The builds are reproducible. After changing a `src/` or a module:
 
     tools/build-patches.sh AUX_3_1_1GB.dsk            # rebuild every bin/
     tools/build-patches.sh AUX_3_1_1GB.dsk --check    # are they current?
@@ -83,6 +84,37 @@ in `bin/record`.
    troubleshooting, the folder's files), and add a row for it to the table of patches in
    the top-level README.
 
+## The Mac patches
+
+A Mac patch (`q605`, `lc3`) is for a group of Macs that A/UX doesn't know and that share
+their hardware as far as A/UX can tell. Its kernel patch is put together from modules
+when it's built:
+
+- A board module (`modules/memcjr`, `modules/sonora`) holds the kernel hooks for one kind
+  of logic board, and `ourmac`, the test for the group's Macs. It's assembler, included by
+  the group's `src/GROUP.S` after `modules/common/hooks.S` (shared hooks as macros: the
+  `_EgretDispatch` result, interrupt vectors, RAM sizing, the checkpoint code).
+- The group's `src/GROUP.S` defines `IFOURMAC`, which picks out its Macs by machineID,
+  then includes the modules. `src/kernel.ld` places their sections in dead kernel code,
+  and `kernel-patch.py` redirects the kernel's call sites to them.
+- `modules/cuda/cuda.c` replaces A/UX's Egret transport on Macs with Cuda. It takes the
+  Egret driver's place, so a kernel with it doesn't run on Egret Macs.
+
+The kernel has no room for everything in one patch: the Cuda transport fills the Egret
+driver's space, and the free space over `orwellsize` holds one board module. So the groups
+follow the board and the system controller (Egret or Cuda).
+
+`make-disk.sh --enabler ENABLER` picks the group from the System Enabler, which lists the
+Macs it is for by BoxFlag (Gestalt machine type - 6; `tools/enabler.py` reads them), and
+each group in `make-disk.sh` lists its Macs' BoxFlags (`BOXFLAGS_GROUP`). To add a group:
+
+1. Make `patches/GROUP/` like `lc3`: `src/GROUP.S` with `IFOURMAC` and the includes,
+   `src/kernel.ld`, `kernel-patch.py`, `build.sh`, `apply.sh DISK ENABLER` (with
+   `tools/put-enabler.sh`), the Toolbox's BoxFlags in `src/toolbox.txt`, and a README.
+2. In `make-disk.sh`, add it to `MACS` with `BOXFLAGS_GROUP` and `TITLE_GROUP`, and to the
+   enablers in the usage text.
+3. Add a row to the top-level README's table.
+
 ## Setup
 
     brew install m68k-elf-binutils m68k-elf-gcc hfsutils unar   # building
@@ -112,6 +144,8 @@ The tools run on the system `python3` (3.9 or later) with only the standard libr
 | `tools/ufsput.py` | Write files (up to 16MB) and make directories in an A/UX UFS partition (clones only); check a partition like fsck |
 | `tools/ufs.py` | Read-only A/UX UFS reader (partitions, find, ls with device numbers, cat, extract, where) |
 | `tools/macbin.py` | Wrap a Mac file, as `unar -k visible` extracts it, as MacBinary II (for `hcopy -m`) |
+| `tools/enabler.py` | Which Macs a System Enabler is for: its number and the BoxFlags its `gbly` resource lists |
+| `tools/put-enabler.sh` | Put a System Enabler, as downloaded, into a disk image's System Folder (clones only) |
 | `tools/coff.py`, `tools/auxdis.py` | A/UX COFF reader; symbol-annotated 68040 disassembler |
 | `tools/ksyms-ld.py` | Kernel COFF symbols as a GNU ld script |
 | `tools/kpatch.py` | What the kernel patch generators share: finding patch sites in a kernel, writing them as a binpatch spec |
@@ -136,9 +170,9 @@ With `mame-snap.lua`, `CPUID=2226 mame ...` makes it a 33 MHz 605, and `CPUID=22
 
 For a console log, run the probe instead: `OUT=log STOP=200 PATCHED=1 EXECLOG=1 mame ...
 -debug -debugger none -autoboot_script tools/mame-605-probe.lua`, then
-`python3 -I tools/probe-log.py KERNEL log`. `CKPT=1 patches/memcjr/apply.sh CLONE.hd
-ENABLER` puts in a checkpoint kernel (see `patches/memcjr/src/boot605.S`) for finding hangs
-on real hardware without a console.
+`python3 -I tools/probe-log.py KERNEL log`. `CKPT=1 patches/q605/apply.sh CLONE.hd
+ENABLER` puts in a checkpoint kernel (see `modules/common/hooks.S` and
+`modules/memcjr/memcjr.S`) for finding hangs on real hardware without a console.
 
 MAME's `maclc3` and `maclc3p` are an LC III at 25 MHz and an LC III+ at 33 MHz (ROM sets
 `maclc3` and `egret`). `mame-snap.lua` and `mame-ckpt-test.lua` load `tools/mame-lc3.lua`
@@ -150,8 +184,8 @@ For sound, `-wavwrite FILE` records MAME's output.
     mame maclc3 -ram 32M -hard CLONE.hd -autoboot_script tools/mame-snap.lua \
       -snapshot_directory DIR -video none -sound none -nothrottle -seconds_to_run 170
 
-`CKPT=1 patches/sonora/apply.sh CLONE.hd ENABLER` puts in the Sonora checkpoint kernel
-(see `patches/sonora/src/sonora.S`); `KEY=3 OUT=log STOP=150 mame maclc3 ... -debug
+`CKPT=1 patches/lc3/apply.sh CLONE.hd ENABLER` puts in the LC III checkpoint kernel
+(see `modules/sonora/sonora.S`); `KEY=3 OUT=log STOP=150 mame maclc3 ... -debug
 -debugger none -autoboot_script tools/mame-ckpt-test.lua` holds key 3 into it.
 
 ## By hand
@@ -159,8 +193,8 @@ For sound, `-wavwrite FILE` records MAME's output.
 The `apply.sh` scripts work on any copy:
 
     cp -c AUX_3_1_1GB.dsk CLONE.hd
-    patches/memcjr/apply.sh CLONE.hd System_Enabler_065_12-sea.bin
-    # or, for an LC III: patches/sonora/apply.sh CLONE.hd System_Enabler_003_1.1.sea.bin
+    patches/q605/apply.sh CLONE.hd System_Enabler_065_12-sea.bin
+    # or, for an LC III: patches/lc3/apply.sh CLONE.hd System_Enabler_003_1.1.sea.bin
     patches/date/apply.sh CLONE.hd
     patches/daynaport/apply.sh CLONE.hd 192.168.1.50
     patches/pkg/apply.sh CLONE.hd

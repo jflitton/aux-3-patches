@@ -1,5 +1,5 @@
--- MAME autoboot script: test a checkpoint kernel (CKPT=1 build: patches/memcjr/src/boot605.S,
--- patches/sonora/src/sonora.S) by holding a checkpoint key (1-9, 0, Q-P) from t=15s until
+-- MAME autoboot script: test a checkpoint kernel (CKPT=1 build: modules/memcjr/memcjr.S,
+-- modules/sonora/sonora.S) by holding a checkpoint key (1-9, 0, Q-P) from t=15s until
 -- the kernel starts. Logs every kernel _start and every jump to the ROM's restart entry
 -- (d0 = the checkpoint) with the time. Snapshot every 10s.
 --   KEY=5 OUT=log STOP=230 mame macqd605 -ram 32M -debug -debugger none -hard CLONE.hd \

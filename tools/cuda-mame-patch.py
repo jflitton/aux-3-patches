@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Describe the Cuda patch for tools/mame-605-probe.lua (applied in RAM at kernel _start).
 
-  cuda-mame-patch.py KERNEL_COFF build/memcjr/kernel-605.elf build/memcjr/kernel-605.bin > build/cuda-NAME.lua
+  cuda-mame-patch.py KERNEL_COFF build/q605/kernel.elf build/q605/kernel.bin > build/cuda-NAME.lua
 
 Kernel .text is loaded physically at the first 4KB page after pstart (endpstart rounded
 up; 0x5c000 for 3.1), so a .text address maps to that + (addr - 0x10000000) while the

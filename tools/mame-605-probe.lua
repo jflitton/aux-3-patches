@@ -9,7 +9,7 @@
 -- memsize uses the generic banksize probe instead of memcdjsize (MEMCjr reg 0x2C reads 0).
 -- STUB_EGRET=1 makes aEgretDispatch (the ROM's _EgretDispatch, patched by A/UX) return at
 -- once with pbResult = 0 instead of driving the Cuda with Egret signalling.
--- PATCHED=1: the disk's kernel already carries the 605 patch (patches/memcjr/build.sh +
+-- PATCHED=1: the disk's kernel already carries the 605 patch (patches/q605/build.sh +
 -- tools/binpatch.py); apply nothing in RAM, only log.
 -- Breakpoints stay disabled until the kernel's _start so Mac OS code at the same low
 -- addresses doesn't trigger them.
@@ -17,8 +17,8 @@
 -- UDUMP=dir saves the u-area (virtual 0x12fff000, 4KB) every 5s after t=30 (ps-style view).
 -- EXECLOG=1 logs every exec (setregs) and exit with u_comm/u_psargs ("X ..." lines).
 -- SYSCALLS=n logs the first n system calls ("S num comm args").
--- CUDA=build/cuda-NAME.lua (tools/cuda-mame-patch.py on build/memcjr/kernel-605.elf/.bin, from
--- patches/memcjr/build.sh) loads the Cuda transport at _start and
+-- CUDA=build/cuda-NAME.lua (tools/cuda-mame-patch.py on build/q605/kernel.elf/.bin, from
+-- patches/q605/build.sh) loads the Cuda transport at _start and
 -- sets devices[1] (Egret/Cuda present) after boardinit.
 -- VIDEOLOG=1 traces video_find (slot, devbase, VPBlock, driver lookups).
 -- PRODINFO=file loads a prepared 0x34-byte ProductInfo copy into A/UX's buffer after

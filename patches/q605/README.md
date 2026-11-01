@@ -1,7 +1,7 @@
-# MEMCjr
+# Quadra 605
 
-`--memcjr ENABLER` · A/UX 3.1 · Quadra 605 with a full 68040; LC 475 and Performa 475/476
-untested
+`--enabler System_Enabler_065_12-sea.bin` · A/UX 3.1 · Quadra 605 with a full 68040;
+LC 475 and Performa 475/476 untested
 
 Runs A/UX 3.1 on the Quadra 605, whose MEMCjr memory and video controller and Cuda system
 controller A/UX doesn't know, and in theory on the LC 475 and Performa 475/476. The LC 575
@@ -21,7 +21,8 @@ It adds System Enabler 065 to the disk's Mac OS, teaches the kernel the 605's Cu
 - **A full 68040.** The 605 and 475 came with a 68LC040 (marked *MC68LC040*), which lacks
   the floating-point unit A/UX requires.
 - **System Enabler 065** version 1.2, usually `System_Enabler_065_12-sea.bin` (widely
-  archived online), as downloaded.
+  archived online), as downloaded. Give it to `make-disk.sh` with `--enabler`, which picks
+  this patch for it. (`--memcjr`, this patch's old option, still works.)
 - hfsutils and unar (on a Mac, `brew install hfsutils unar`).
 
 ## Compatibility
@@ -46,13 +47,16 @@ Tested: starts up to the A/UX desktop, with video at every color depth.
 | File | What it is |
 |---|---|
 | `apply.sh DISK ENABLER` | Applies the patch to a copy of a disk image |
-| `build.sh KERNEL OUTDIR` | Builds `bin/` from `src/` (needs the m68k-elf cross compiler) |
+| `build.sh KERNEL OUTDIR` | Builds `bin/` from `src/` and the modules (needs the m68k-elf cross compiler) |
 | `kernel-patch.py` | Finds the places to change in an A/UX kernel; writes the kernel patch |
-| `src/cuda.c` | Cuda transport for A/UX's Egret driver |
-| `src/boot605.S` | Kernel boot hooks: `boardinit`, `devices[]`, `cpuspeed`, ProductInfo, RAM sizing; `ismemcjr`, the test for a 605 or 475 |
-| `src/kernel605.ld` | Links both into the space of A/UX's Egret code |
-| `src/toolbox-605.txt` | Byte patch to the Toolbox (`Patch.067C`): the 605's and 475's BoxFlags |
-| `bin/kernel-605.txt` | The kernel patch, for `/unix` and `/etc/config.d/newunix` |
+| `src/q605.S` | The kernel hooks: which Macs these are (`IFOURMAC`), then the modules below |
+| `src/kernel.ld` | Links the hooks and the Cuda transport into the space of A/UX's Egret code |
+| `src/toolbox.txt` | Byte patch to the Toolbox (`Patch.067C`): the 605's and 475's BoxFlags |
+| `bin/kernel.txt` | The kernel patch, for `/unix` and `/etc/config.d/newunix` |
+| `../../modules/memcjr/memcjr.S` | The MEMCjr board module: `boardinit`, `devices[]`, `cpuspeed`, ProductInfo, RAM sizing; `ourmac`, the test for these Macs |
+| `../../modules/cuda/cuda.c` | Cuda transport for A/UX's Egret driver |
+| `../../modules/common/hooks.S` | Hooks the board modules share, and the checkpoint code |
 
-`CKPT=1 apply.sh …` installs a checkpoint kernel for locating hangs (see `src/boot605.S`).
+`CKPT=1 apply.sh …` installs a checkpoint kernel for locating hangs (see
+`modules/common/hooks.S` and `modules/memcjr/memcjr.S`).
 Notes: [docs/findings.md](../../docs/findings.md).

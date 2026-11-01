@@ -12,22 +12,23 @@ Usage: ./make-disk.sh AUX-IMAGE NEW-DISK PATCHES... [network settings]
   NEW-DISK   the patched copy to make, e.g. ~/Desktop/HD0_AUX.hda
 
 Patches (choose one or more):
-  --memcjr ENABLER     MEMCjr support, for the Quadra 605 (and, untested, the
-                       LC 475 and Performa 475/476). ENABLER is System
-                       Enabler 065 as you downloaded it,
-                       e.g. System_Enabler_065_12-sea.bin
-  --sonora ENABLER     Sonora support, for the LC III and LC III+ (and the
-                       Performa 450/460/466/467), with an FPU. ENABLER is
-                       System Enabler 003 version 1.1 as you downloaded it,
-                       e.g. System_Enabler_003_1.1.sea.bin
-                       (--memcjr and --sonora are for different Macs: one disk
-                       takes one of them)
+  --enabler ENABLER    support for a Mac that A/UX 3.1 doesn't know. ENABLER is
+                       the System Enabler your Mac needs, as you downloaded it,
+                       and it picks the patch:
+                         065 (e.g. System_Enabler_065_12-sea.bin): the Quadra
+                             605 with a full 68040 (the LC 475 and Performa
+                             475/476 untested)
+                         003 version 1.1 (e.g. System_Enabler_003_1.1.sea.bin):
+                             the LC III and LC III+, and the Performa
+                             450/460/466/467, with an FPU
+                       One enabler per disk: a disk is for one of these Macs.
   --daynaport          DaynaPORT networking, for a BlueSCSI or ZuluSCSI with Wi-Fi
   --date               the date command, fixed for years after 1999
   --pkg                the pkg package manager, which installs software from package
                        files or over the network
 
-Each patch is described in patches/NAME/README.md.
+Each patch is described in patches/NAME/README.md; for --enabler, NAME is q605
+(System Enabler 065) or lc3 (003).
 
 Network settings for --daynaport (all optional; leave them out and the Mac gets
 its address by DHCP, from your router):
@@ -38,12 +39,12 @@ its address by DHCP, from your router):
 
 Example, a Quadra 605 disk with every patch:
   ./make-disk.sh ~/Downloads/AUX_3_1_1GB_Use_In_Shoebill.zip ~/Desktop/HD0_AUX.hda \
-      --memcjr ~/Downloads/System_Enabler_065_12-sea.bin --daynaport --date --pkg \
+      --enabler ~/Downloads/System_Enabler_065_12-sea.bin --daynaport --date --pkg \
       --ip 192.168.1.50
 
 An LC III disk:
   ./make-disk.sh ~/Downloads/AUX_3_1_1GB_Use_In_Shoebill.zip ~/Desktop/HD0_AUX.hda \
-      --sonora ~/Downloads/System_Enabler_003_1.1.sea.bin --date
+      --enabler ~/Downloads/System_Enabler_003_1.1.sea.bin --date
 EOF
 }
 
@@ -60,41 +61,61 @@ die() { say "" "$*" >&2; exit 1; }
 #                 can't go on it
 #   apply_NAME    patches the new disk ($out) in place; its output goes to the log
 # PATCHES lists them in the order they are applied.
-PATCHES="memcjr sonora date daynaport pkg"
+PATCHES="mac date daynaport pkg"
+
+# The Macs A/UX 3.1 doesn't know come in groups, one patch each (patches/GROUP, with
+# apply.sh DISK ENABLER). The System Enabler those Macs need for System 7.1 picks the
+# group: tools/enabler.py reads the Macs the enabler lists, by BoxFlag (the Gestalt machine
+# type minus 6), and the group is the one with any of them. Each group has
+#   BOXFLAGS_GROUP  its Macs' BoxFlags, in hex
+#   TITLE_GROUP     what it is, for the progress lines
+# (MACS, not GROUPS: bash, which is sh on macOS, has a read-only GROUPS, and assigning it
+# ends the script without a word.)
+MACS="q605 lc3"
+BOXFLAGS_q605="53 54 58 59"	# LC/Performa 475, Quadra 605, each at 25 and 33 MHz
+TITLE_q605="Quadra 605 support (LC/Performa 475 untested)"
+BOXFLAGS_lc3="15 38"		# LC III and Performa 450; LC III+ and Performa 460-467
+TITLE_lc3="LC III and LC III+ support"
 
 # kernel_ok SPEC: the kernel patch SPEC applies to the disk's kernel, or is on it already
 kernel_ok() { python3 -I tools/binpatch.py "$1" "$src" "$root" > /dev/null 2>&1; }
-MEMCJR_KERNEL=patches/memcjr/bin/kernel-605.txt
-SONORA_KERNEL=patches/sonora/bin/kernel-sonora.txt
-# the A/UX 3.1 kernel: each kernel patch matches the core of every 3.1 kernel (whatever it
-# is configured for, and whether it has that patch already) and no other
-is_aux31() { kernel_ok $MEMCJR_KERNEL || kernel_ok $SONORA_KERNEL; }
+# the A/UX 3.1 kernel: each group's kernel patch matches the core of every 3.1 kernel
+# (whatever it is configured for, and whether it has that patch already) and no other
+is_aux31() {
+	for g in $MACS; do kernel_ok patches/$g/bin/kernel.txt && return 0; done
+	return 1
+}
 
-NEEDS_memcjr="hmount:hfsutils unar:unar"
-title_memcjr() { say "MEMCjr support (Quadra 605; LC/Performa 475 untested)"; }
-check_memcjr() {
-	[ -f "$enabler" ] || die "Can't find System Enabler 065: $enabler"
-	lsar "$enabler" 2>/dev/null | grep -q 065 ||
-		die "$(basename "$enabler") doesn't look like System Enabler 065. Use the file as you
+# mac: --enabler, the patch for the group of Macs the enabler is for ($group, set by
+# check_mac)
+NEEDS_mac="hmount:hfsutils unar:unar"
+title_mac() { eval "say \"\$TITLE_$group\""; }
+check_mac() {
+	[ -f "$enabler" ] || die "Can't find the System Enabler: $enabler"
+	rm -rf "$tmp/enabler"
+	unar -q -k visible -o "$tmp/enabler" "$enabler" > /dev/null 2>&1 &&
+		set -- "$tmp"/enabler/* && [ $# -eq 1 ] &&
+		info=$(python3 -I tools/enabler.py "$1" 2> /dev/null) ||
+		die "$(basename "$enabler") doesn't look like a System Enabler. Use the file as you
 downloaded it (for example System_Enabler_065_12-sea.bin)."
+	number=${info%% *} group=
+	for g in $MACS; do
+		eval "flags=\$BOXFLAGS_$g"
+		for f in $flags; do
+			case " ${info#* } " in *" $f "*) group=$g ;; esac
+		done
+	done
+	[ -n "$group" ] || die "System Enabler $number is for Macs these patches don't support (yet).
+./make-disk.sh --help lists the enablers they take."
+	# the old options, --memcjr (065) and --sonora (003), still work, for their own Macs
+	[ -z "$expect" ] || [ "$group" = "$expect" ] ||
+		die "$option doesn't take System Enabler $number. Give it with --enabler, which picks
+the patch for the Macs the enabler is for."
 	is_aux31 || die "$name isn't an A/UX 3.1 disk: its kernel is different."
-	kernel_ok $MEMCJR_KERNEL ||
-		die "$name has the Sonora (LC III) patch already. Start from an unpatched disk."
+	kernel_ok patches/$group/bin/kernel.txt ||
+		die "$name has the patch for other Macs already. Start from an unpatched disk."
 }
-apply_memcjr() { run sh patches/memcjr/apply.sh "$out" "$enabler"; }
-
-NEEDS_sonora="hmount:hfsutils unar:unar"
-title_sonora() { say "Sonora support (LC III, LC III+)"; }
-check_sonora() {
-	[ -f "$enabler" ] || die "Can't find System Enabler 003: $enabler"
-	lsar "$enabler" 2>/dev/null | grep -q 003 ||
-		die "$(basename "$enabler") doesn't look like System Enabler 003. Use the file as you
-downloaded it (for example System_Enabler_003_1.1.sea.bin)."
-	is_aux31 || die "$name isn't an A/UX 3.1 disk: its kernel is different."
-	kernel_ok $SONORA_KERNEL ||
-		die "$name has the MEMCjr (Quadra 605) patch already. Start from an unpatched disk."
-}
-apply_sonora() { run sh patches/sonora/apply.sh "$out" "$enabler"; }
+apply_mac() { run sh patches/$group/apply.sh "$out" "$enabler"; }
 
 NEEDS_date=
 title_date() { say "the year 2000 fix for date"; }
@@ -132,21 +153,19 @@ apply_pkg() { run sh patches/pkg/apply.sh "$out"; }
 
 # --- what was asked for ------------------------------------------------------------
 
-chosen= aux= out= enabler= ip= mask= gw= dns= n=0
+chosen= aux= out= enabler= expect= option= group= ip= mask= gw= dns= n=0
 choose() { case " $chosen " in *" $1 "*) ;; *) chosen="$chosen $1" ;; esac; }
 want() { case " $chosen " in *" $1 "*) return 0 ;; esac; return 1; }
 while [ $# -gt 0 ]; do
 	case $1 in
 	-h|--help|help)
 		usage; exit 0 ;;
-	--memcjr)
-		[ $# -ge 2 ] || die "--memcjr needs System Enabler 065, e.g.
---memcjr ~/Downloads/System_Enabler_065_12-sea.bin"
-		choose memcjr; enabler=$2; shift 2; continue ;;
-	--sonora)
-		[ $# -ge 2 ] || die "--sonora needs System Enabler 003, e.g.
---sonora ~/Downloads/System_Enabler_003_1.1.sea.bin"
-		choose sonora; enabler=$2; shift 2; continue ;;
+	--enabler|--memcjr|--sonora)
+		[ $# -ge 2 ] || die "$1 needs the System Enabler your Mac needs, e.g.
+$1 ~/Downloads/System_Enabler_065_12-sea.bin"
+		[ -z "$enabler" ] || die "Give one System Enabler: a disk is for one group of Macs."
+		case $1 in --memcjr) expect=q605 ;; --sonora) expect=lc3 ;; esac
+		choose mac; option=$1 enabler=$2; shift 2; continue ;;
 	--daynaport)
 		choose daynaport; shift; continue ;;
 	--date)
@@ -167,11 +186,8 @@ while [ $# -gt 0 ]; do
 	shift
 done
 if [ $n -lt 2 ]; then usage; exit 1; fi
-[ -n "$chosen" ] || die "Choose at least one patch: --memcjr ENABLER, --sonora ENABLER,
---daynaport, --date or --pkg. (./make-disk.sh --help lists them.)"
-if want memcjr && want sonora; then
-	die "--memcjr and --sonora are for different Macs (Quadra 605, LC III): choose one."
-fi
+[ -n "$chosen" ] || die "Choose at least one patch: --enabler ENABLER, --daynaport, --date
+or --pkg. (./make-disk.sh --help lists them.)"
 
 isaddr() {
 	say "$1" | grep -Eq '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$' &&

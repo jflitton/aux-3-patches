@@ -1,8 +1,16 @@
 /*
- * Quadra 605 and LC/Performa 475 boot hooks for the A/UX kernel, linked after the Cuda
- * transport in the dead Egret code (src/kernel605.ld; .text.boot605.extra, the MMU-on hooks
- * and the ProductInfo buffer, goes in egret_reset's dead body). Kernel call sites are
- * redirected here by the patch that kernel-patch.py generates:
+ * MEMCjr board module: the Quadra 605 and LC/Performa 475 (Cuda, MEMCjr with DAFB, IOSB
+ * style I/O). Kernel hooks for A/UX, included by a group's source (patches/q605/src/q605.S)
+ * after modules/common/hooks.S, once the group has defined its Macs:
+ *
+ *   IFOURMAC yes   with d0.w = machineID, branch to yes on the group's Macs (d0 changed)
+ *
+ * The code goes in three sections for the group's linker script to place: .text.boot605,
+ * the hooks that run with the MMU off; .text.boot605.extra, the MMU-on hooks and the
+ * ProductInfo buffer; .text.ckpt, the checkpoint code (CKPT_BUILD only). The q605 group
+ * links the first two in the dead Egret code after the Cuda transport (modules/cuda), and
+ * the third over orwellsize. Kernel call sites are redirected here by the group's
+ * kernel-patch.py:
  *
  *   boardinit's switch    -> b605_switch   (MMU off)
  *   _start: jsr boardinit -> b605_board    (MMU off)
@@ -15,56 +23,22 @@
  * the first 4KB page after pstart), so it reaches itself PC-relative and the kernel
  * only through pstart, which is identity-mapped. Every hook leaves other machines alone.
  * DAFB monitor sensing is A/UX's own (DAFBReadSenseLines), as on a Centris 650.
- *
- * The machineID (Gestalt - 2) follows the clock: the ROM picks its ProductInfo by the CPU
- * ID register, whose low bits give the speed. Quadra 605: $2225 25MHz (Gestalt 94), $2226
- * 33MHz (Gestalt 95), so 0x5c and 0x5d. LC 475 and Performa 475/476: $2221 25MHz
- * (Gestalt 89), $2222 33MHz (Gestalt 90), so 0x57 and 0x58. The ROM's 475 records differ
- * from the 605's only in ProductKind and CPU ID, so the 475 gets the 605's treatment; it is
- * untested on a real 475.
  */
 
-QUADRA605 = 0x5c		/* 25MHz; 33MHz is QUADRA605 + 1 */
-LC475 = 0x57			/* 25MHz; 33MHz is LC475 + 1 */
 CENTRIS650 = 0x1c
 MEMCJR_HOLD = 0x50f0e07c	/* upper six bits of 12-bit DAFB/MEMCjr registers */
 PI_CPUID = 0x45			/* ProductInfo: low byte of the CPU ID; bit 1 set at 33MHz */
 
-/* d0.w = machineID: branch to \yes on the Macs this patch supports; d0 changed */
-	.macro	IFMEMCJR yes
-	sub.w	#LC475,%d0
-	cmp.w	#1,%d0
-	jbls	\yes			/* LC475, LC475 + 1 */
-	subq.w	#QUADRA605-LC475,%d0
-	cmp.w	#1,%d0
-	jbls	\yes			/* QUADRA605, QUADRA605 + 1 */
-	.endm
-
-/*
- * Checkpoint build (CKPT_BUILD, build.sh with CKPT=1): holding a key
- * through A/UX Startup's "Launching" makes the kernel restart the machine (startup
- * chime) when it reaches that key's checkpoint, so a hang can be located without a
- * console. Keys 1-9, 0 are checkpoints 1-10; Q W E R T Y U I O P are 11-20. The
- * checkpoint code lives in .text.ckpt, linked over orwellsize in pstart (identity-mapped,
- * so it runs the same with the MMU off or on; only Orwell machines call orwellsize).
- */
-	.macro	CKPT n
-#ifdef CKPT_BUILD
-	move.w	#\n,-(%sp)
-	jsr	ckpt
-#endif
-	.endm
-
 	.section .text.boot605,"ax"
 
 /*
- * int ismemcjr(void): 1 on a 605 or a 475 (either speed), else 0, with the condition codes
- * set from it. Only d0 changes, so cuda.c calls it too.
+ * int ourmac(void): 1 on the group's Macs, else 0, with the condition codes set from it.
+ * Only d0 changes, so the Cuda transport (modules/cuda/cuda.c) calls it too.
  */
-	.globl	ismemcjr
-ismemcjr:
+	.globl	ourmac
+ourmac:
 	move.w	machineID,%d0
-	IFMEMCJR 1f
+	IFOURMAC 1f
 	moveq	#0,%d0
 	rts
 1:	moveq	#1,%d0
@@ -72,13 +46,13 @@ ismemcjr:
 
 /*
  * In place of boardinit's "move.w machineID,d0; ext.l d0; bra switch": take the
- * Centris 650 case (djMEMC/IOSB: 53C96, SWIM, SCC, sound, DAFB) for the 605 and 475, but
- * only here; machineID stays as it is for every other user.
+ * Centris 650 case (djMEMC/IOSB: 53C96, SWIM, SCC, sound, DAFB) on our Macs, but only
+ * here; machineID stays as it is for every other user.
  */
 	.globl	b605_switch
 b605_switch:
 	CKPT	2			/* setupProductInfo done */
-	jbsr	ismemcjr
+	jbsr	ourmac
 	jbne	1f
 	move.w	machineID,%d0
 	ext.l	%d0
@@ -87,7 +61,7 @@ b605_switch:
 2:	jmp	boardinit_switch
 
 /*
- * Wraps the call to boardinit. On the 605 and 475:
+ * Wraps the call to boardinit. On our Macs:
  *   devices[1] = 1  Egret present: the Cuda transport stands in for it (ADB, RTC,
  *                   PRAM, power off, reboot)
  *   devices[5] = 0  size RAM with the generic banksize probe, not memcdjsize
@@ -107,7 +81,7 @@ b605_board:
 	jsr	boardinit
 	CKPT	8			/* boardinit done */
 	CKPT	20			/* the same, restarting as the first ckpt image did */
-	jbsr	ismemcjr
+	jbsr	ourmac
 	jbeq	1f
 	move.b	#1,devices+1
 	clr.b	devices+5
@@ -176,11 +150,12 @@ pi_offsets:
  * leaves at kstart+$10C (MemTop there is the kernel's end), rounded up to 1MB. In MAME
  * that is the RAM size exactly: Mac OS keeps 0x20000-0x50000 at the top for itself.
  * Same results: bank = {start, from, end, 1}, numbanks++, probed pages zeroed, lowmem 0
- * restored.
+ * restored. (modules/common/hooks.S's BANKSIZE is this with PhysMemTop as well, for Mac OS
+ * in 24-bit mode.)
  */
 	.globl	b605_banksize
 b605_banksize:
-	jbsr	ismemcjr
+	jbsr	ourmac
 	jbne	1f
 	jmp	banksize
 1:	movem.l	%d2-%d7/%a2-%a4,-(%sp)
@@ -274,53 +249,16 @@ ram_end:
 	.globl	b605_lowmem
 b605_lowmem:
 	CKPT	10			/* MMU on */
-	jbsr	ismemcjr
+	jbsr	ourmac
 	jbeq	1f
 	move.l	#pi_buf,ProductInfoPtr
 1:	jmp	setup_lowmem_globals
 
-/*
- * In place of vadrspace's "jsr setup_autovectors". The 605 and 475 interrupt at levels 1
- * (VIA1), 2 (VIA2) and 4 (SCC). Past the Quadra 700, A/UX leaves levels 3 and 5 on
- * faulthdlr (an "unexpected kernel trap" panic) and 6 on powerintr (SIGPWR to init). A
- * 33MHz 605 took a stray level 3 (trap type 27) at IPL 2 in the SCSI interrupt, root
- * already mounted: most likely the IPL lines reading 3 for a moment between levels 1 and
- * 2. Point 3, 5 and 6 at nointr (rte), as setup_autovectors itself does for the Quadra
- * 700 and older.
- */
-	.globl	b605_vectors
-b605_vectors:
-	jbsr	ismemcjr
-	jbeq	1f
-	move.l	#nointr,%d0
-	move.l	%d0,autovec+8		/* level 3 */
-	move.l	%d0,autovec+16		/* level 5 */
-	move.l	%d0,autovec+20		/* level 6 */
-1:	jmp	setup_autovectors
+/* In place of vadrspace's "jsr setup_autovectors" (see modules/common/hooks.S) */
+	NOINTR_VECTORS b605_vectors
 
-/*
- * In place of aEgretDispatch's "jsr cEgretDispatch". aEgretDispatch is A/UX's handler for
- * the ROM's _EgretDispatch trap and passes back cEgretDispatch's C result (1 = done) in
- * d0. Mac OS returns pbResult (0 = noErr), and the 605 ROM's XPRAM routine (ROM+$B37EC)
- * hands that d0 on as _ReadXPRam's and _WriteXPRam's result. So in the kernel every slot
- * PRAM read "failed": the DAFB driver's Open gave up before reading its PRAM flags, and
- * its mode sets then left out the MEMCjr pipeline correction to HAL/HFP (picture shifted
- * left, more at lower depths; Thousands broken). On the 605 and 475, return pbResult,
- * with the condition codes set from it; elsewhere, as before. A/UX's own callers of
- * ReadXPRam and WriteXPRam ignore d0.
- */
-	.globl	b605_egret
-b605_egret:
-	jbsr	ismemcjr
-	jbeq	1f
-	move.l	4(%sp),-(%sp)		/* the parameter block aEgretDispatch pushed */
-	jsr	cEgretDispatch
-	addq.l	#4,%sp
-	movea.l	4(%sp),%a0
-	move.w	14(%a0),%d0		/* pbResult */
-	ext.l	%d0
-	rts
-1:	jmp	cEgretDispatch
+/* In place of aEgretDispatch's "jsr cEgretDispatch" (see modules/common/hooks.S) */
+	EGRET_RESULT b605_egret
 
 	.balign	4
 pi_buf:
@@ -329,65 +267,24 @@ pi_buf:
 #ifdef CKPT_BUILD
 	.section .text.ckpt,"ax"
 
-/* CKPT n: move.w #n,-(sp); jsr ckpt. Restarts if n is the held key's checkpoint;
-   otherwise returns with n popped and all registers but the condition codes kept. */
-ckpt:
-	move.l	%d0,-(%sp)
-	move.b	ckpt_key(%pc),%d0
-	cmp.b	9(%sp),%d0
-	jbeq	ckpt_restart
-	move.l	(%sp)+,%d0
-	rtd	#2
+	CKPT_CODE
 
 /*
- * As A/UX's doboot: the ROM's restart entry. On the 605 and 475, first empty MEMCjr's
- * holding register, which every DAFB read loads and the next register write ORs in, so
- * the ROM's start-up writes do not inherit it. Checkpoint 20 skips that, as the first
- * checkpoint image did. (Its own test: ismemcjr is in .text, not reachable from here
+ * Restart, d0 = checkpoint: as A/UX's doboot, the ROM's restart entry. On our Macs, first
+ * empty MEMCjr's holding register, which every DAFB read loads and the next register write
+ * ORs in, so the ROM's start-up writes do not inherit it. Checkpoint 20 skips that, as the
+ * first checkpoint image did. (Its own test: ourmac is in .text, not reachable from here
  * with the MMU off.)
  */
-ckpt_restart:				/* d0 = checkpoint */
+ckpt_restart:
 	move.w	#0x2700,%sr
 	cmp.b	#20,%d0
 	jbeq	1f
 	move.w	machineID,%d0
-	IFMEMCJR 2f
+	IFOURMAC 2f
 	jbra	1f
 2:	clr.l	MEMCJR_HOLD
 1:	jmp	0x4080000a
-
-/*
- * Called first thing in b605_board, MMU off: record which checkpoint key Mac OS saw
- * held (its KeyMap, as launch left it at kstart+$174) in ckpt_key, 0 for none.
- */
-	.globl	ckpt_capture
-ckpt_capture:
-	move.l	%d2,-(%sp)
-	move.l	kstart,%a0
-	lea	0x174(%a0),%a0
-	lea	ckpt_keys(%pc),%a1
-	moveq	#1,%d1
-1:	moveq	#0,%d0
-	move.b	(%a1)+,%d0
-	jbmi	3f
-	move.l	%d0,%d2
-	lsr.l	#3,%d2
-	btst	%d0,(%a0,%d2.l)
-	jbne	2f
-	addq.l	#1,%d1
-	jbra	1b
-3:	moveq	#0,%d1
-2:	lea	ckpt_key(%pc),%a1
-	move.b	%d1,(%a1)
-	move.l	(%sp)+,%d2
-	rts
-
-ckpt_keys:				/* Mac key codes of 1-9, 0, Q W E R T Y U I O P */
-	.byte	0x12, 0x13, 0x14, 0x15, 0x17, 0x16, 0x1a, 0x1c, 0x19, 0x1d
-	.byte	0x0c, 0x0d, 0x0e, 0x0f, 0x11, 0x10, 0x20, 0x22, 0x1f, 0x23, 0xff
-ckpt_key:
-	.byte	0
-	.balign	2
 
 /*
  * In place of _DAFBMonitorDetect's jsr DAFBReadSenseLines in this build: A/UX's own

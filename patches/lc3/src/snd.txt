@@ -3,7 +3,8 @@
 ; /unix as autoconfig links it from that module.
 
 ; The kernel patch gives these Macs the Quadras' sound path (devices[0] = 2, see
-; src/sonora.S), whose sample loop in sndintr writes each sample to FIFO B ($400) only:
+; modules/sonora/sonora.S), whose sample loop in sndintr writes each sample to FIFO B
+; ($400) only:
 ;   cmpi.b #2,devices; beq.b <skip A>; btst #2,asc_state+3; bne.b <skip A>;
 ;   move.b d0,([sound_addr]); move.b sample,([sound_addr],$400)
 ; Sonora plays FIFO A and FIFO B as the two channels, and the LC III's speaker plays A:

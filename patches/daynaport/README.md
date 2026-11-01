@@ -46,7 +46,7 @@ pkg, and `pkg upgrade` keeps it up to date if you have pkg (`--pkg`).
 
 | | Tested | Not tested yet |
 |---|---|---|
-| **Mac** | Quadra 605, LC III (with `--sonora`) | Other Macs that A/UX supports |
+| **Mac** | Quadra 605, LC III (each with `--enabler`) | Other Macs that A/UX supports |
 | **Adapter** | BlueSCSI or ZuluSCSI with Wi-Fi | Other DaynaPORT emulators, a real DaynaPORT |
 | **A/UX disk** | `AUX_3_1_1GB_Use_In_Shoebill.zip` | Other A/UX 3.1 disks |
 

@@ -4,7 +4,11 @@
 [development.md](development.md). This is a dated log, and files have moved since: the
 605 work is now the MEMCjr patch, in `patches/memcjr/` (`src/` was `src/`, the build was
 `tools/build-kernel605.sh`, and `tools/make-605-disk.sh` became `make-disk.sh --memcjr
---date`); `patches/date-y2k.txt` is `patches/date/src/date-y2k.txt`.*
+--date`); `patches/date-y2k.txt` is `patches/date/src/date-y2k.txt`. Since 2026-11-01 the
+MEMCjr and Sonora patches are `patches/q605/` and `patches/lc3/`, chosen by `make-disk.sh
+--enabler`, and their code is in `modules/`: `boot605.S` is `modules/memcjr/memcjr.S`,
+`src/cuda.c` `modules/cuda/cuda.c`, `sonora.S` `modules/sonora/sonora.S` (see that day's
+section).*
 
 Ground truth from disassembling the shipped kernels, plus MAME and Linux sources.
 This supersedes the guesses in `reference/605-port-references.md` where they disagree.
@@ -823,7 +827,70 @@ and A/UX's ioctl numbers (not 4.3BSD's), are in aux-3-ports' decisions ("netsetu
 and `route` exits 1 even when it worked. `nslookup` (BIND 4.8's) times out against a
 UniFi router whose DNS the libc resolver uses fine; not looked into.
 
+## 2026-11-01: Mac patches as groups built from modules; `--enabler`
+
+**Why.** The Color Classic II (below) is Sonora, the LC III patch's board, with Cuda, the
+605 patch's system controller. The two patches were separate kernels with code copied
+between them (the `_EgretDispatch` result hook, the interrupt vectors, the bounded RAM
+probe, the checkpoint code). They can't be stacked on a disk: both redirect the same call
+sites (boardinit's switch, `_start`'s `jsr boardinit`, `setup_autovectors`, memsize's
+banksize call, `aEgretDispatch+2`), and binpatch checks each site's original bytes. Nor can
+one kernel serve every Mac: the Cuda transport takes 1,924 of the 2,028 bytes of the Egret
+driver it replaces, so an Egret Mac would lose its clock, PRAM, ADB and soft power; keeping
+both needs about 2KB more, and the space over `orwellsize` (766 bytes to
+`_DAFBMonitorDetect`) holds the Sonora hooks (494). So: one patch per group of Macs, a
+group being a board module with Egret or with Cuda, put together from shared source when
+it's built. (Jeff, 2026-11-01.)
+
+**Layout.** `modules/common/hooks.S` holds macros (`CKPT`, `EGRET_RESULT`,
+`NOINTR_VECTORS`, `BANKSIZE`, `CKPT_CODE`); `modules/memcjr/memcjr.S` and
+`modules/sonora/sonora.S` are board modules (their hooks and `ourmac`, the test for the
+group's Macs); `modules/cuda/cuda.c` calls `ourmac`. A group's `src/GROUP.S` defines
+`IFOURMAC` (its machineIDs) and includes `hooks.S` and its board module. That makes one
+assembly unit, so calls to `ourmac` stay short `bsr`s and the code lands where it did;
+`src/kernel.ld` places the sections; `kernel-patch.py`, `build.sh` and `apply.sh` as before,
+the enabler step shared as `tools/put-enabler.sh`. Groups are named after Macs (`q605`,
+`lc3`), modules after chips.
+
+**Verified.** Both groups' `bin/kernel.txt`: identical to the old `kernel-605.txt` and
+`kernel-sonora.txt` but for the two header comment lines. Checkpoint builds: q605's .text,
+.text2 and .text3 the same sizes (`ckpt_capture` and `ckpt_restart` swapped places); lc3's
+714 bytes (was 702), as it now takes all 20 checkpoint keys. Disks from the old
+`make-disk.sh` (`--memcjr`, `--sonora`) and the new (`--enabler`), same enabler and
+`--date`: identical but for the HFS volume's last-modified date and the same date in its
+catalog. Not booted, since the bytes are the same.
+
+**`--enabler`** (Jeff's choice, 2026-11-01): the System Enabler picks the group.
+`tools/enabler.py` reads the enabler's `gbly` resource: a version word (1), a long, a count
+word, then the BoxFlags as words. Enabler 065 1.2 lists 0x53 0x54 0x58 0x59 (the 475 and
+605 at each speed) and 0x56 (the LC 575, not supported); 003 1.1 lists 0x15 0x38; 403 1.0.2
+lists 0x4b 0x32 0x4d 0x4a. A group is chosen if the enabler lists any of its BoxFlags
+(`BOXFLAGS_GROUP` in `make-disk.sh`). The enabler still goes into the System Folder as
+"System Enabler NNN", the number from its file name. `--memcjr` and `--sonora` still work,
+with their own enablers only. 003 1.0 (0x15 alone) is still accepted: it's fine on an LC III
+at 25MHz.
+
+**The 605's RAM probe** still stops at BufPtr (the 24-bit mode fix went into the Sonora
+copy only), kept so the refactor changes no bytes. Sharing `BANKSIZE` is next.
+
+**Color Classic II, LC 520, LC 550** (Sonora with Cuda). Linux `config.c` gives the Color
+Classic II the LC III's types but `MAC_ADB_CUDA`. The LC III's ROM (`ecbbc41c`, $067C) has
+its ProductInfo pointers at ROM+$D2780 (17, self-relative): Sonora-decoder (kind $0B)
+records for Gestalt 27 (LC III, CPU ID word $0001 at +$3C), 62 (LC III+, $0003), 28, 40, 41
+and 42, none for 56, 80 or 83. MAME's `maclc520` and `maclc550` use `ede66cbd.rom` (not
+here), `mactv` `eaf1678d`; MAME has no Color Classic II. Enabler 403 1.0.2 lists 0x32 (LC
+520, Gestalt 56), 0x4a (LC 550, 80), 0x4d (Color Classic II, 83) and 0x4b (Gestalt 81,
+unknown: perhaps a clock variant, as with the LC III+): machineIDs 0x36, 0x4e, 0x51, 0x4f.
+Plan: a group with the Sonora module over `orwellsize` and the Cuda transport over the
+Egret driver (the two spaces don't overlap), the DFAC filter ahead of `cuda_dispatch`
+(`sonora_cegret`'s hook, cEgretDispatch's first instruction, is gone with the Egret code),
+the Toolbox's 0x32 and 0x4a-0x4d to 0x0C, enabler 403; first in MAME's `maclc550`.
+
 ## Open items
+- A Sonora + Cuda group (LC 520, LC 550, Color Classic II): see 2026-11-01. MAME needs
+  `ede66cbd.rom`.
+- q605: use the shared `BANKSIZE` (PhysMemTop as well as BufPtr); a 605 with Mac OS in
+  24-bit mode would get 8MB.
 - LC III: a 25MHz board (Gestalt 27) and the Performas on real hardware; sound input, the
   floppy drive and the serial ports (found by the kernel, not exercised). The DFAC volume
   is set once from Mac OS's SdVolume while A/UX's control drives ASC $806, so a low Mac OS
@@ -831,7 +898,7 @@ UniFi router whose DNS the libc resolver uses fine; not looked into.
 - Real 605 (33MHz): A/UX 3.1 boots to the Finder with correct video at every depth (v7).
   A/UX's `_EgretDispatch` returning 1 for success is fixed on the 605 and (Sonora patch)
   the LC III / III+ only; other Egret machines have the same convention, not touched.
-- The MEMCjr patch is for the Quadra 605, and in theory the LC/Performa 475 (MAME only, see
+- The q605 patch (MEMCjr) is for the Quadra 605, and in theory the LC/Performa 475 (MAME only, see
   above); A/UX's Egret machines (IIsi, IIvi, IIvx, Performa 600, Q900, Q950) must use
   unpatched media (the kernel guard only keeps it harmless there).
 - A real 475 (with a full 68040): first run, ideally with the checkpoint kernel at hand.
